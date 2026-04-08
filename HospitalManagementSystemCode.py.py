@@ -50,6 +50,6 @@ def menu():
         elif c=="2": book_appt(); view_appts()
         elif c=="3": gen_bill(); view_bills()
         elif c=="4": break
-        else: print("Invalid")
+        else: print("Invalid!")
 
 menu()

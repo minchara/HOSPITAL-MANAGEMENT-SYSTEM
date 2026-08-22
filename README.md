@@ -2,47 +2,49 @@
 
 A Hospital Management System (HMS) is a centralized digital software platform that connects healthcare operations, clinical records, and financial systems into a unified workflow. By digitising the core pillars of a medical facility—patient records, appointment scheduling, and billing management—the system eliminates manual errors, speeds up care delivery, and stops revenue leakage.
 
+A lightweight, console-based terminal application built in Python and HTML to streamline basic healthcare administration workflows. 
 
-1. Patient Record Management (EMR/EHR Module)
+## ⚙️ Features
 
-This module acts as the secure, digital archive for a patient's entire medical journey, replacing paper files with Electronic Health Records (EHR).
+* **Patient Registry**: Add patient profiles and view formatted records.
+  
+* **Appointment Scheduling**: Book appointments tied directly to unique Patient IDs.
+  
+* **Billing System**: Generate instant financial receipts for registered patients.
+  
+* **ID Validation**: Prevents booking or billing for non-existent patient records.
+  
 
-Unified Digital ID: Every patient receives a unique, lifelong identification code upon registration to prevent mixed files.
+## 🚀 Getting Started
 
-Centralized Health History: Houses allergies, past diagnoses, surgical history, family medical background, and vitals.
+### Prerequisites
 
-Inter-Departmental Linking: Automatically imports radiology images and laboratory results directly into the profile.
+* Python 3.x installed on your machine.
 
-Clinical Documentation: Enables doctors to use text templates, digital tablets, or AI speech-to-text to write prescriptions and notes.
+### Installation & Execution
+1. Clone or download the repository file:
+   ```bash
+   git clone https://github.com
+   cd hospital-management
+   ```
+2. Run the application directly from your terminal:
+   ```bash
+   python main.py
+   ```
 
-Strict Security Data Protocols: Includes role-based encryption to ensure only authorized medical personnel access private data.
+## 📊 System Overview
 
+The application utilizes an interactive numeric menu:
+* **1-2 (Patients)**: Register new profiles or print out the patient directory.
+  
+* **3-4 (Appointments)**: Log doctor visits and view the current calendar grid.
+  
+* **5-6 (Billing)**: Input invoice costs and monitor paid receipt sheets.
+  
+* **7 (Exit)**: Safely close out the current operational system loop.
 
-2. Appointment Scheduling Module
+## ⚠️ Important Notes
 
-This feature manages the balance between doctor availability, patient queues, and clinic capacity to minimize operational downtime.
-
-Multi-Channel Booking: Patients book slots independently through an online portal, smartphone app, or via front-desk reception.
-
-Real-Time Rostering: Displays dynamic, live calendars of matching doctor schedules across various specialties.
-
-Automated Queue Management: Converts scheduled slots into physical queues, adapting for walk-ins and urgent emergencies.
-
-Automated Reminders: Sends instant SMS, email, or WhatsApp alerts for bookings, modifications, or cancellations.
-
-Telehealth Integration: Launches face-to-face video consultation rooms natively within the appointment dashboard.
-
-
-3. Billing & Financial Management Module
-
-This function automates the financial calculation of hospital visits, itemizing treatments, medications, and room charges.
-
-Charge Consolidation: Compiles clinical fees, laboratory costs, dispensed pharmacy medications, and ward rent.
-
-Insurance Claim Management: Tracks coverage levels, automates co-pays, and manages electronic claims submission.
-
-Flexible Invoicing: Generates itemized, tax-compliant invoices right at discharge with dynamic outstanding balance tracking.
-
-Digital Gateway Support: Connects securely to external payment methods like credit cards, online banking, and UPI.
-
-Financial Reporting Tools: Tracks hospital earnings, outstanding collections, and departmental revenue performance.
+* **In-Memory Storage**: Data resets every time the script is closed.
+  
+* **Data Input**: Entering text inside numeric Patient ID fields will crash the program.

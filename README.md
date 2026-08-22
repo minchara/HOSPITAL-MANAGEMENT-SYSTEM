@@ -43,8 +43,3 @@ The application utilizes an interactive numeric menu:
   
 * **7 (Exit)**: Safely close out the current operational system loop.
 
-## ⚠️ Important Notes
-
-* **In-Memory Storage**: Data resets every time the script is closed.
-  
-* **Data Input**: Entering text inside numeric Patient ID fields will crash the program.

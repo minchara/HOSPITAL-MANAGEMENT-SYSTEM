@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniDoc — Hospital Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F7F6;
+    --surface:#FFFFFF;
+    --ink:#122224;
+    --muted:#5C7274;
+    --muted-soft:#8FA3A4;
+    --line:#DCE6E4;
+    --primary:#0F5C5C;
+    --primary-dark:#0A4444;
+    --primary-soft:#E4F0EE;
+    --accent:#E14F4F;
+    --accent-soft:#FDECEC;
+    --ok:#1F8A5F;
+    --ok-soft:#E8F6EF;
+    --warn:#B8842A;
+    --warn-soft:#FBF1DF;
+    --wash:#EAF1F0;
+    --shadow:0 8px 24px -12px rgba(10,44,44,.18);
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Space Grotesk', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
+  }
+
+  .shell{display:grid; grid-template-columns:230px 1fr; min-height:100vh;}
+  .rail{
+    background:var(--primary-dark); color:#EAF3F1;
+    padding:24px 18px; display:flex; flex-direction:column; gap:26px;
+    position:sticky; top:0; height:100vh;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px; background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-weight:600;font-size:13px;color:#fff;
+    flex-shrink:0;
+  }
+  .brand-name{font-weight:700;font-size:16px;letter-spacing:.2px;}
+  .brand-sub{font-size:11px;color:#9FC0BC;font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+
+  nav{display:flex;flex-direction:column;gap:4px;}
+  .navlink{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 12px;border-radius:8px;
+    color:#C9E1DD;font-size:14px;font-weight:500;
+    cursor:pointer;border:1px solid transparent; background:none; text-align:left;
+    width:100%; font-family:inherit;
+    transition:background .12s ease, color .12s ease;
+  }
+  .navlink:hover{background:rgba(255,255,255,.06);}
+  .navlink.active{background:rgba(255,255,255,.1); color:#fff; border-color:rgba(255,255,255,.12);}
+  .navlink .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.5;}
+  .navlink .tag{
+    margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#9FC0BC;
+  }
+  .rail-foot{
+    margin-top:auto; font-size:11px; color:#7FA6A1;
+    font-family:'IBM Plex Mono',monospace; line-height:1.6;
+  }
+
+  .main{padding:26px 34px 60px; max-width:1180px;}
+
+  #toast-stack{
+    position:fixed; top:20px; right:20px; z-index:200;
+    display:flex; flex-direction:column; gap:8px; align-items:flex-end;
+  }
+  .toast{
+    background:var(--primary-dark); color:#fff;
+    padding:11px 16px; border-radius:9px; font-size:13px; font-weight:500;
+    box-shadow:var(--shadow); display:flex; align-items:center; gap:9px;
+    animation:toast-in .22s cubic-bezier(.2,.8,.3,1);
+    max-width:320px;
+  }
+  .toast.error{background:var(--accent);}
+  .toast .ic{width:16px;height:16px;flex-shrink:0;}
+  @keyframes toast-in{ from{opacity:0; transform:translateY(-6px) scale(.98);} to{opacity:1; transform:translateY(0) scale(1);} }
+  .toast.leaving{animation:toast-out .18s ease forwards;}
+  @keyframes toast-out{ to{opacity:0; transform:translateX(12px);} }
+
+  .vitals{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden; margin-bottom:22px;
+  }
+  .vital{background:var(--surface); padding:16px 18px; position:relative;}
+  .vital-label{
+    font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--muted); font-family:'IBM Plex Mono',monospace;
+  }
+  .vital-value{
+    font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600;
+    margin-top:4px; color:var(--primary-dark);
+  }
+  .vital-pulse{
+    position:absolute;top:14px;right:16px;width:7px;height:7px;border-radius:50%;
+    background:var(--ok); animation:pulse 2.4s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(31,138,95,.45);}
+    70%{box-shadow:0 0 0 8px rgba(31,138,95,0);}
+    100%{box-shadow:0 0 0 0 rgba(31,138,95,0);}
+  }
+
+  .quick-actions{display:flex; gap:10px; margin-bottom:22px; flex-wrap:wrap;}
+  .qa-btn{
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--line);
+    padding:11px 15px; border-radius:9px; font-size:13.5px; font-weight:600;
+    color:var(--primary-dark); cursor:pointer; font-family:inherit;
+    transition:border-color .12s ease, transform .12s ease;
+  }
+  .qa-btn:hover{border-color:var(--primary); transform:translateY(-1px);}
+  .qa-btn:disabled{opacity:.45; cursor:not-allowed; transform:none;}
+  .qa-btn .plus{color:var(--accent); font-weight:700;}
+
+  .dash-grid{display:grid; grid-template-columns:1.3fr 1fr; gap:18px;}
+  @media (max-width:980px){ .dash-grid{grid-template-columns:1fr;} }
+
+  .activity-item{
+    display:flex; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line);
+    font-size:13px; align-items:flex-start;
+  }
+  .activity-item:last-child{border-bottom:none;}
+  .activity-dot{ width:8px;height:8px;border-radius:50%; margin-top:5px; flex-shrink:0; }
+  .activity-dot.patient{background:var(--primary);}
+  .activity-dot.appt{background:var(--warn);}
+  .activity-dot.bill{background:var(--ok);}
+  .activity-time{color:var(--muted-soft); font-size:11px; font-family:'IBM Plex Mono',monospace; margin-left:auto; white-space:nowrap; padding-left:8px;}
+
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
+  .panel-head{
+    display:flex;align-items:center;justify-content:space-between; gap:12px;
+    padding:18px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .panel-title{font-size:17px;font-weight:700;}
+  .panel-sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .head-actions{display:flex; gap:8px; align-items:center;}
+
+  .btn{
+    background:var(--primary); color:#fff;border:none;
+    padding:9px 16px;border-radius:8px;
+    font-family:'Space Grotesk',sans-serif; font-weight:600;font-size:13.5px;
+    cursor:pointer; transition:background .12s ease, transform .08s ease;
+  }
+  .btn:hover{background:var(--primary-dark);}
+  .btn:active{transform:scale(.97);}
+  .btn:disabled{background:var(--muted-soft); cursor:not-allowed;}
+  .btn.ghost{background:transparent; color:var(--primary); border:1px solid var(--line);}
+  .btn.ghost:hover{background:var(--wash);}
+  .btn.danger{background:var(--accent);}
+  .btn.danger:hover{background:#C93B3B;}
+  .btn.small{padding:6px 11px;font-size:12px;border-radius:6px;}
+
+  .search-input{
+    padding:8px 12px 8px 32px; border:1px solid var(--line); border-radius:7px;
+    font-family:inherit; font-size:13px; background:var(--surface) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="%235C7274" stroke-width="2"><circle cx="6" cy="6" r="5"/><line x1="10" y1="10" x2="13" y2="13"/></svg>') no-repeat 10px center;
+    width:200px;
+  }
+
+  .form-wrap{ padding:0 20px; max-height:0; overflow:hidden; background:var(--wash); transition:max-height .22s ease, padding .22s ease; }
+  .form-wrap.open{ padding:18px 20px; max-height:400px; border-bottom:1px solid var(--line); }
+  .form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:12px; }
+  .field label{
+    display:block;font-size:11px;font-weight:600; text-transform:uppercase;letter-spacing:.04em;
+    color:var(--muted);margin-bottom:5px;
+  }
+  .field input, .field select{
+    width:100%;padding:9px 10px; border:1px solid var(--line);border-radius:7px;
+    font-family:'Space Grotesk',sans-serif; font-size:13.5px;background:#fff;color:var(--ink);
+    transition:border-color .12s ease;
+  }
+  .field input.err, .field select.err{ border-color:var(--accent); background:var(--accent-soft); }
+  .field-msg{ font-size:11px; color:var(--accent); margin-top:4px; min-height:14px; }
+  .form-actions{display:flex;gap:8px; align-items:center;}
+  .form-hint{font-size:12px; color:var(--muted);}
+
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse; min-width:640px;}
+  thead th{
+    text-align:left; font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);font-weight:600; padding:12px 20px;border-bottom:1px solid var(--line);
+    background:var(--wash); white-space:nowrap;
+  }
+  th.sortable{cursor:pointer; user-select:none;}
+  th.sortable:hover{color:var(--primary-dark);}
+  th.sortable .arrow{font-size:9px; margin-left:3px; opacity:.5;}
+  th.sortable.active .arrow{opacity:1; color:var(--primary);}
+  tbody td{ padding:12px 20px; border-bottom:1px solid var(--line); font-size:13.5px; }
+  tbody tr{transition:background .1s ease;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFCFB;}
+  tbody tr.flash{animation:flash 1s ease;}
+  @keyframes flash{ 0%{background:var(--ok-soft);} 100%{background:transparent;} }
+
+  .id-chip{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--primary-dark); background:var(--wash); padding:2px 7px;border-radius:5px; }
+  .status{ display:inline-block; padding:3px 9px;border-radius:20px; font-size:11px;font-weight:600; font-family:'IBM Plex Mono',monospace; }
+  .status.Scheduled{background:var(--wash);color:var(--primary-dark);}
+  .status.Completed{background:var(--ok-soft);color:var(--ok);}
+  .status.Cancelled{background:var(--accent-soft);color:var(--accent);}
+  .status.Paid{background:var(--ok-soft);color:var(--ok);}
+  .status.Due{background:var(--warn-soft);color:var(--warn);}
+
+  .empty{padding:52px 20px;text-align:center;color:var(--muted);}
+  .empty-mark{ font-family:'IBM Plex Mono',monospace; font-size:12px;letter-spacing:.1em;text-transform:uppercase; color:var(--muted);margin-bottom:6px; }
+  .empty-title{font-size:15px;font-weight:600;color:var(--ink); margin-bottom:14px;}
+
+  .row-actions{display:flex;gap:6px; justify-content:flex-end;}
+  .confirm-row{ display:flex; gap:6px; align-items:center; justify-content:flex-end; }
+  .confirm-text{font-size:12px; color:var(--accent); font-weight:600;}
+
+  select.status-select{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px;padding:4px 6px;border-radius:6px;
+    border:1px solid var(--line); background:#fff;
+  }
+
+  h1.page-title{font-size:22px;margin:0 0 2px;}
+  p.page-sub{color:var(--muted);font-size:13.5px;margin:0 0 20px;}
+
+  .no-results{padding:28px 20px; text-align:center; color:var(--muted); font-size:13px;}
+
+  @media (max-width:800px){
+    .shell{grid-template-columns:1fr;}
+    .rail{ position:sticky; top:0; height:auto; flex-direction:row; overflow-x:auto; padding:14px 16px; gap:16px; z-index:50;}
+    .brand-sub{display:none;}
+    nav{flex-direction:row;}
+    .navlink .tag{display:none;}
+    .rail-foot{display:none;}
+    .vitals{grid-template-columns:repeat(2,1fr);}
+    .main{padding:18px;}
+    .search-input{width:140px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="toast-stack" aria-live="polite"></div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark">+</div>
+      <div>
+        <div class="brand-name">MiniDoc</div>
+        <div class="brand-sub">HMS / v1.1</div>
+      </div>
+    </div>
+    <nav id="nav" aria-label="Sections">
+      <button class="navlink active" data-view="dashboard"><span class="dot"></span>Overview</button>
+      <button class="navlink" data-view="patients"><span class="dot"></span>Patients <span class="tag" id="nav-patients-count">0</span></button>
+      <button class="navlink" data-view="appointments"><span class="dot"></span>Appointments <span class="tag" id="nav-appts-count">0</span></button>
+      <button class="navlink" data-view="billing"><span class="dot"></span>Billing <span class="tag" id="nav-bills-count">0</span></button>
+    </nav>
+    <div class="rail-foot">SESSION DATA ONLY<br>no records persist on reload</div>
+  </aside>
+
+  <main class="main">
+    <div id="view-dashboard"></div>
+    <div id="view-patients" style="display:none;"></div>
+    <div id="view-appointments" style="display:none;"></div>
+    <div id="view-billing" style="display:none;"></div>
+  </main>
+</div>
+
+<script>
+let patients = [];
+let appointments = [];
+let bills = [];
+let activity = [];
+let pidCounter = 1, aidCounter = 1, bidCounter = 1;
+let currentView = 'dashboard';
+let formOpen = { patients:false, appointments:false, billing:false };
+let search = { patients:'', appointments:'', billing:'' };
+let sortState = { patients:{key:'id',dir:1}, appointments:{key:'id',dir:1}, billing:{key:'id',dir:1} };
+let pendingDelete = null;
+
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+function fmtMoney(n){ const num=parseFloat(n); return isNaN(num) ? n : '$'+num.toFixed(2); }
+function nowLabel(){ const d=new Date(); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function logActivity(type, text){ activity.unshift({type, text, time: nowLabel()}); activity = activity.slice(0,8); }
+
+function toast(msg, type){
+  const stack = document.getElementById('toast-stack');
+  const node = el(`<div class="toast ${type==='error'?'error':''}" role="status">
+    <svg class="ic" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l3.5 3.5L16 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>${msg}</span>
+  </div>`);
+  stack.appendChild(node);
+  setTimeout(()=>{ node.classList.add('leaving'); setTimeout(()=>node.remove(), 200); }, 2600);
+}
+
+function switchView(view){
+  currentView = view;
+  pendingDelete = null;
+  document.querySelectorAll('.navlink').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  ['dashboard','patients','appointments','billing'].forEach(v=>{
+    document.getElementById('view-'+v).style.display = (v===view)?'block':'none';
+  });
+  render();
+}
+document.getElementById('nav').addEventListener('click', e=>{
+  const t = e.target.closest('.navlink');
+  if(t) switchView(t.dataset.view);
+});
+
+function setFieldError(id, msg){
+  const input = document.getElementById(id);
+  const msgEl = document.getElementById(id+'-msg');
+  if(input) input.classList.toggle('err', !!msg);
+  if(msgEl) msgEl.textContent = msg || '';
+}
+function clearFieldErrors(ids){ ids.forEach(id=>setFieldError(id, '')); }
+
+function renderDashboard(){
+  const view = document.getElementById('view-dashboard');
+  const totalRevenue = bills.filter(b=>b.status==='Paid').reduce((s,b)=>s+parseFloat(b.amt||0),0);
+  const dueCount = bills.filter(b=>b.status==='Due').length;
+  const scheduledCount = appointments.filter(a=>a.status==='Scheduled').length;
+
+  const vitalsHtml = `
+    <div class="vitals">
+      ${[
+        ['Patients on record', patients.length],
+        ['Appointments scheduled', scheduledCount],
+        ['Bills outstanding', dueCount],
+        ['Revenue collected', '$'+totalRevenue.toFixed(2)]
+      ].map(([label,value])=>`
+        <div class="vital">
+          <span class="vital-pulse"></span>
+          <div class="vital-label">${label}</div>
+          <div class="vital-value">${value}</div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  const quickActions = `
+    <div class="quick-actions">
+      <button class="qa-btn" onclick="jumpAndOpen('patients')"><span class="plus">+</span> Add patient</button>
+      <button class="qa-btn" onclick="jumpAndOpen('appointments')" ${patients.length?'':'disabled'}><span class="plus">+</span> Book appointment</button>
+      <button class="qa-btn" onclick="jumpAndOpen('billing')" ${patients.length?'':'disabled'}><span class="plus">+</span> Generate bill</button>
+    </div>`;
+
+  const activityHtml = activity.length ? activity.map(a=>`
+    <div class="activity-item">
+      <span class="activity-dot ${a.type}"></span>
+      <span>${a.text}</span>
+      <span class="activity-time">${a.time}</span>
+    </div>
+  `).join('') : `<div class="empty"><div class="empty-mark">Nothing yet</div><div class="empty-title">Activity will appear here as you add records.</div></div>`;
+
+  const dueBills = bills.filter(b=>b.status==='Due').slice(0,5).map(b=>{
+    const p = patients.find(p=>p.id===b.pid);
+    return `<div class="activity-item">
+      <span class="activity-dot bill"></span>
+      <span>${p?p.name:'—'} · <span class="mono">${fmtMoney(b.amt)}</span></span>
+      <span class="activity-time"><span class="status Due">Due</span></span>
+    </div>`;
+  }).join('') || `<div class="empty"><div class="empty-mark">All clear</div><div class="empty-title">No outstanding bills right now.</div></div>`;
+
+  view.innerHTML = `
+    <h1 class="page-title">Overview</h1>
+    <p class="page-sub">A snapshot of today's chart activity.</p>
+    ${vitalsHtml}
+    ${quickActions}
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><div><div class="panel-title">Recent activity</div><div class="panel-sub">Latest changes this session</div></div></div>
+        ${activityHtml}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><div class="panel-title">Outstanding bills</div><div class="panel-sub">Needs follow-up</div></div></div>
+        ${dueBills}
+      </div>
+    </div>
+  `;
+}
+function jumpAndOpen(section){
+  switchView(section);
+  formOpen[section] = true;
+  render();
+  setTimeout(()=>{
+    const firstInput = document.querySelector('.form-wrap.open input, .form-wrap.open select');
+    if(firstInput) firstInput.focus();
+  }, 50);
+}
+
+function applySort(list, view){
+  const {key, dir} = sortState[view];
+  return [...list].sort((a,b)=>{
+    let av=a[key], bv=b[key];
+    if(typeof av==='string') av=av.toLowerCase();
+    if(typeof bv==='string') bv=bv.toLowerCase();
+    if(av<bv) return -1*dir;
+    if(av>bv) return 1*dir;
+    return 0;
+  });
+}
+function toggleSort(view, key){
+  if(sortState[view].key===key){ sortState[view].dir *= -1; }
+  else{ sortState[view] = {key, dir:1}; }
+  render();
+}
+function sortArrow(view, key){
+  const s = sortState[view];
+  if(s.key!==key) return '';
+  return s.dir===1 ? '▲' : '▼';
+}
+
+function renderPatients(){
+  const view = document.getElementById('view-patients');
+  let list = patients.filter(p => (p.name+p.phone+p.disease).toLowerCase().includes(search.patients.toLowerCase()));
+  list = applySort(list, 'patients');
+
+  const rows = list.map(p=>`
+    <tr id="prow-${p.id}">
+      <td><span class="id-chip">P-${String(p.id).padStart(3,'0')}</span></td>
+      <td>${p.name}</td>
+      <td>${p.age}</td>
+      <td>${p.gender}</td>
+      <td class="mono">${p.phone}</td>
+      <td>${p.disease}</td>
+      <td>${rowActionsHtml('patients', p.id)}</td>
+    </tr>
+  `).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Patients</h1>
+    <p class="page-sub">Registered patients and their intake details.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Patient records</div>
+          <div class="panel-sub">${patients.length} on file</div>
+        </div>
+        <div class="head-actions">
+          ${patients.length ? `<input class="search-input" placeholder="Search patients" value="${search.patients}" oninput="search.patients=this.value; renderPatients();" aria-label="Search patients">` : ''}
+          <button class="btn" onclick="toggleForm('patients')">${formOpen.patients?'Close':'+ Add patient'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.patients?'open':''}">
+        <div class="form-grid">
+          <div class="field"><label for="f-p-name">Name</label><input id="f-p-name" placeholder="Jane Doe"><div class="field-msg" id="f-p-name-msg"></div></div>
+          <div class="field"><label for="f-p-age">Age</label><input id="f-p-age" type="number" min="0" placeholder="34"><div class="field-msg" id="f-p-age-msg"></div></div>
+          <div class="field"><label for="f-p-gender">Gender</label>
+            <select id="f-p-gender"><option>Female</option><option>Male</option><option>Other</option></select>
+          </div>
+          <div class="field"><label for="f-p-phone">Phone</label><input id="f-p-phone" placeholder="+91 98765 43210"><div class="field-msg" id="f-p-phone-msg"></div></div>
+          <div class="field"><label for="f-p-disease">Disease / reason</label><input id="f-p-disease" placeholder="Hypertension"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="addPatient()">Save patient</button>
+          <button class="btn ghost" onclick="toggleForm('patients')">Cancel</button>
+        </div>
+      </div>
+      ${patients.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.patients.key==='id'?'active':''}" onclick="toggleSort('patients','id')">ID <span class="arrow">${sortArrow('patients','id')||'▲'}</span></th>
+            <th class="sortable ${sortState.patients.key==='name'?'active':''}" onclick="toggleSort('patients','name')">Name <span class="arrow">${sortArrow('patients','name')}</span></th>
+            <th>Age</th><th>Gender</th><th>Phone</th><th>Disease</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No patients match "${search.patients}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No patients yet</div>
+          <div class="empty-title">Add the first patient to start a chart.</div>
+          <button class="btn" onclick="toggleForm('patients')">+ Add patient</button>
+        </div>
+      `}
+    </div>
+  `;
+}
+function toggleForm(section){
+  formOpen[section] = !formOpen[section];
+  render();
+  if(formOpen[section]){
+    setTimeout(()=>{ const f=document.querySelector('.form-wrap.open input, .form-wrap.open select'); if(f) f.focus(); }, 50);
+  }
+}
+function addPatient(){
+  const name = document.getElementById('f-p-name').value.trim();
+  const age = document.getElementById('f-p-age').value.trim();
+  const gender = document.getElementById('f-p-gender').value;
+  const phone = document.getElementById('f-p-phone').value.trim();
+  const disease = document.getElementById('f-p-disease').value.trim();
+
+  clearFieldErrors(['f-p-name','f-p-age','f-p-phone']);
+  let ok = true;
+  if(!name){ setFieldError('f-p-name','Name is required.'); ok=false; }
+  if(!age || isNaN(age) || parseInt(age)<=0){ setFieldError('f-p-age','Enter a valid age.'); ok=false; }
+  if(!phone){ setFieldError('f-p-phone','Phone is required.'); ok=false; }
+  if(!ok) return;
+
+  const id = pidCounter++;
+  patients.push({ id, name, age, gender, phone, disease: disease||'—' });
+  logActivity('patient', `${name} added as a new patient`);
+  formOpen.patients = false;
+  render();
+  toast(`${name} added to patient records`);
+  setTimeout(()=>{ const row=document.getElementById('prow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function removePatient(id){
+  const p = patients.find(p=>p.id===id);
+  patients = patients.filter(p=>p.id!==id);
+  logActivity('patient', `${p?p.name:'Patient'} removed from records`);
+  render();
+  toast(`${p?p.name:'Patient'} removed`, 'error');
+}
+
+function renderAppointments(){
+  const view = document.getElementById('view-appointments');
+  let list = appointments.filter(a=>{
+    const p = patients.find(p=>p.id===a.pid);
+    const hay = (a.doctor+a.dept+(p?p.name:'')).toLowerCase();
+    return hay.includes(search.appointments.toLowerCase());
+  });
+  list = applySort(list, 'appointments');
+
+  const rows = list.map(a=>{
+    const patient = patients.find(p=>p.id===a.pid);
+    return `
+    <tr id="arow-${a.id}">
+      <td><span class="id-chip">A-${String(a.id).padStart(3,'0')}</span></td>
+      <td>${patient ? patient.name : '— removed —'}</td>
+      <td>${a.doctor}</td>
+      <td class="mono">${a.date}</td>
+      <td class="mono">${a.time}</td>
+      <td>${a.dept}</td>
+      <td>
+        <select class="status-select" onchange="updateApptStatus(${a.id}, this.value)" aria-label="Appointment status">
+          <option ${a.status==='Scheduled'?'selected':''}>Scheduled</option>
+          <option ${a.status==='Completed'?'selected':''}>Completed</option>
+          <option ${a.status==='Cancelled'?'selected':''}>Cancelled</option>
+        </select>
+      </td>
+      <td>${rowActionsHtml('appointments', a.id)}</td>
+    </tr>
+  `;}).join('');
+
+  const patientOptions = patients.map(p=>`<option value="${p.id}">P-${String(p.id).padStart(3,'0')} — ${p.name}</option>`).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Appointments</h1>
+    <p class="page-sub">Bookings across doctors and departments.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Appointment schedule</div>
+          <div class="panel-sub">${appointments.length} booked</div>
+        </div>
+        <div class="head-actions">
+          ${appointments.length ? `<input class="search-input" placeholder="Search appointments" value="${search.appointments}" oninput="search.appointments=this.value; renderAppointments();" aria-label="Search appointments">` : ''}
+          <button class="btn" onclick="toggleForm('appointments')" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.appointments?'Close':'+ Book appointment'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.appointments?'open':''}">
+        ${patients.length ? `
+        <div class="form-grid">
+          <div class="field"><label for="f-a-pid">Patient</label><select id="f-a-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-a-doctor">Doctor</label><input id="f-a-doctor" placeholder="Dr. Rao"><div class="field-msg" id="f-a-doctor-msg"></div></div>
+          <div class="field"><label for="f-a-date">Date</label><input id="f-a-date" type="date"><div class="field-msg" id="f-a-date-msg"></div></div>
+          <div class="field"><label for="f-a-time">Time</label><input id="f-a-time" type="time"><div class="field-msg" id="f-a-time-msg"></div></div>
+          <div class="field"><label for="f-a-dept">Department</label><input id="f-a-dept" placeholder="Cardiology"><div class="field-msg" id="f-a-dept-msg"></div></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="bookAppt()">Save appointment</button>
+          <button class="btn ghost" onclick="toggleForm('appointments')">Cancel</button>
+        </div>
+        ` : `<p class="form-hint">Add a patient first — appointments need a patient on file.</p>`}
+      </div>
+      ${appointments.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.appointments.key==='id'?'active':''}" onclick="toggleSort('appointments','id')">ID <span class="arrow">${sortArrow('appointments','id')||'▲'}</span></th>
+            <th>Patient</th>
+            <th class="sortable ${sortState.appointments.key==='doctor'?'active':''}" onclick="toggleSort('appointments','doctor')">Doctor <span class="arrow">${sortArrow('appointments','doctor')}</span></th>
+            <th class="sortable ${sortState.appointments.key==='date'?'active':''}" onclick="toggleSort('appointments','date')">Date <span class="arrow">${sortArrow('appointments','date')}</span></th>
+            <th>Time</th><th>Dept</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No appointments match "${search.appointments}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No appointments yet</div>
+          <div class="empty-title">Book the first appointment for a registered patient.</div>
+          ${patients.length ? `<button class="btn" onclick="toggleForm('appointments')">+ Book appointment</button>` : ''}
+        </div>
+      `}
+    </div>
+  `;
+}
+function bookAppt(){
+  const pid = parseInt(document.getElementById('f-a-pid').value);
+  const doctor = document.getElementById('f-a-doctor').value.trim();
+  const date = document.getElementById('f-a-date').value;
+  const time = document.getElementById('f-a-time').value;
+  const dept = document.getElementById('f-a-dept').value.trim();
+
+  clearFieldErrors(['f-a-doctor','f-a-date','f-a-time','f-a-dept']);
+  let ok = true;
+  if(!doctor){ setFieldError('f-a-doctor','Doctor is required.'); ok=false; }
+  if(!date){ setFieldError('f-a-date','Pick a date.'); ok=false; }
+  if(!time){ setFieldError('f-a-time','Pick a time.'); ok=false; }
+  if(!dept){ setFieldError('f-a-dept','Department is required.'); ok=false; }
+  if(!ok) return;
+
+  const id = aidCounter++;
+  appointments.push({ id, pid, doctor, date, time, dept, status:'Scheduled' });
+  const patient = patients.find(p=>p.id===pid);
+  logActivity('appt', `${patient?patient.name:'Patient'} booked with ${doctor}`);
+  formOpen.appointments = false;
+  render();
+  toast('Appointment booked');
+  setTimeout(()=>{ const row=document.getElementById('arow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function updateApptStatus(id, status){
+  const a = appointments.find(a=>a.id===id);
+  if(a) a.status = status;
+  render();
+  toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);
+}
+function removeAppt(id){
+  appointments = appointments.filter(a=>a.id!==id);
+  render();
+  toast('Appointment removed', 'error');
+}
+
+function renderBilling(){
+  const view = document.getElementById('view-billing');
+  let list = bills.filter(b=>{
+    const p = patients.find(p=>p.id===b.pid);
+    return ((p?p.name:'')+b.status).toLowerCase().includes(search.billing.toLowerCase());
+  });
+  list = applySort(list, 'billing');
+
+  const rows = list.map(b=>{
+    const patient = patients.find(p=>p.id===b.pid);
+    return `
+    <tr id="brow-${b.id}">
+      <td><span class="id-chip">B-${String(b.id).padStart(3,'0')}</span></td>
+      <td>${patient ? patient.name : '— removed —'}</td>
+      <td class="mono">${fmtMoney(b.amt)}</td>
+      <td>
+        <select class="status-select" onchange="updateBillStatus(${b.id}, this.value)" aria-label="Bill status">
+          <option ${b.status==='Paid'?'selected':''}>Paid</option>
+          <option ${b.status==='Due'?'selected':''}>Due</option>
+        </select>
+      </td>
+      <td>${rowActionsHtml('billing', b.id)}</td>
+    </tr>
+  `;}).join('');
+
+  const patientOptions = patients.map(p=>`<option value="${p.id}">P-${String(p.id).padStart(3,'0')} — ${p.name}</option>`).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Billing</h1>
+    <p class="page-sub">Charges generated per patient visit.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Bills</div>
+          <div class="panel-sub">${bills.length} generated</div>
+        </div>
+        <div class="head-actions">
+          ${bills.length ? `<input class="search-input" placeholder="Search bills" value="${search.billing}" oninput="search.billing=this.value; renderBilling();" aria-label="Search bills">` : ''}
+          <button class="btn" onclick="toggleForm('billing')" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.billing?'Close':'+ Generate bill'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.billing?'open':''}">
+        ${patients.length ? `
+        <div class="form-grid">
+          <div class="field"><label for="f-b-pid">Patient</label><select id="f-b-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-b-amt">Amount (USD)</label><input id="f-b-amt" type="number" min="0" step="0.01" placeholder="150.00"><div class="field-msg" id="f-b-amt-msg"></div></div>
+          <div class="field"><label for="f-b-status">Status</label>
+            <select id="f-b-status"><option>Due</option><option>Paid</option></select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" onclick="addBill()">Save bill</button>
+          <button class="btn ghost" onclick="toggleForm('billing')">Cancel</button>
+        </div>
+        ` : `<p class="form-hint">Add a patient first — bills need a patient on file.</p>`}
+      </div>
+      ${bills.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.billing.key==='id'?'active':''}" onclick="toggleSort('billing','id')">Bill ID <span class="arrow">${sortArrow('billing','id')||'▲'}</span></th>
+            <th>Patient</th>
+            <th class="sortable ${sortState.billing.key==='amt'?'active':''}" onclick="toggleSort('billing','amt')">Amount <span class="arrow">${sortArrow('billing','amt')}</span></th>
+            <th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No bills match "${search.billing}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No bills yet</div>
+          <div class="empty-title">Generate the first bill for a patient visit.</div>
+          ${patients.length ? `<button class="btn" onclick="toggleForm('billing')">+ Generate bill</button>` : ''}
+        </div>
+      `}
+    </div>
+  `;
+}
+function addBill(){
+  const pid = parseInt(document.getElementById('f-b-pid').value);
+  const amt = document.getElementById('f-b-amt').value;
+  const status = document.getElementById('f-b-status').value;
+
+  clearFieldErrors(['f-b-amt']);
+  if(!amt || parseFloat(amt) <= 0){ setFieldError('f-b-amt','Enter an amount greater than 0.'); return; }
+
+  const id = bidCounter++;
+  bills.push({ id, pid, amt, status });
+  const patient = patients.find(p=>p.id===pid);
+  logActivity('bill', `Bill of ${fmtMoney(amt)} generated for ${patient?patient.name:'patient'}`);
+  formOpen.billing = false;
+  render();
+  toast('Bill generated');
+  setTimeout(()=>{ const row=document.getElementById('brow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function updateBillStatus(id, status){
+  const b = bills.find(b=>b.id===id);
+  if(b) b.status = status;
+  render();
+  toast(`Bill B-${String(id).padStart(3,'0')} marked ${status}`);
+}
+function removeBill(id){
+  bills = bills.filter(b=>b.id!==id);
+  render();
+  toast('Bill removed', 'error');
+}
+
+function rowActionsHtml(kind, id){
+  if(pendingDelete && pendingDelete.kind===kind && pendingDelete.id===id){
+    return `<div class="confirm-row">
+      <span class="confirm-text">Remove?</span>
+      <button class="btn danger small" onclick="confirmDelete()">Yes</button>
+      <button class="btn ghost small" onclick="cancelDelete()">No</button>
+    </div>`;
+  }
+  return `<div class="row-actions"><button class="btn ghost small" onclick="askDelete('${kind}', ${id})">Remove</button></div>`;
+}
+function askDelete(kind, id){ pendingDelete = {kind, id}; render(); }
+function cancelDelete(){ pendingDelete = null; render(); }
+function confirmDelete(){
+  if(!pendingDelete) return;
+  const {kind, id} = pendingDelete;
+  pendingDelete = null;
+  if(kind==='patients') removePatient(id);
+  else if(kind==='appointments') removeAppt(id);
+  else if(kind==='billing') removeBill(id);
+}
+
+function render(){
+  document.getElementById('nav-patients-count').textContent = patients.length;
+  document.getElementById('nav-appts-count').textContent = appointments.length;
+  document.getElementById('nav-bills-count').textContent = bills.length;
+  renderDashboard();
+  renderPatients();
+  renderAppointments();
+  renderBilling();
+  ['dashboard','patients','appointments','billing'].forEach(v=>{
+    document.getElementById('view-'+v).style.display = (v===currentView)?'block':'none';
+  });
+}
+render();
+</script>
+</body>
+</html>

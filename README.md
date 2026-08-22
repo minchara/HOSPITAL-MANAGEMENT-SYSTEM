@@ -18,7 +18,7 @@ Clinical Documentation: Enables doctors to use text templates, digital tablets, 
 Strict Security Data Protocols: Includes role-based encryption to ensure only authorized medical personnel access private data.
 
 
-3. Appointment Scheduling Module
+2. Appointment Scheduling Module
 
 This feature manages the balance between doctor availability, patient queues, and clinic capacity to minimize operational downtime.
 
@@ -33,7 +33,7 @@ Automated Reminders: Sends instant SMS, email, or WhatsApp alerts for bookings, 
 Telehealth Integration: Launches face-to-face video consultation rooms natively within the appointment dashboard.
 
 
-5. Billing & Financial Management Module
+3. Billing & Financial Management Module
 
 This function automates the financial calculation of hospital visits, itemizing treatments, medications, and room charges.
 

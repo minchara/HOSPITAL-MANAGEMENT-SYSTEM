@@ -76,7 +76,15 @@
   .rail-foot{
     margin-top:auto; font-size:11px; color:#7FA6A1;
     font-family:'IBM Plex Mono',monospace; line-height:1.6;
+    display:flex; flex-direction:column; gap:8px;
   }
+  .btn-clear-storage{
+    background:transparent; border:1px solid rgba(255,255,255,.2); color:#9FC0BC;
+    padding:6px 8px; border-radius:6px; font-size:10px; cursor:pointer;
+    font-family:'IBM Plex Mono',monospace; text-align:center;
+    transition:background .12s, color .12s;
+  }
+  .btn-clear-storage:hover{ background:rgba(225,79,79,.2); color:#fff; border-color:var(--accent); }
 
   .main{padding:26px 34px 60px; max-width:1180px;}
 
@@ -270,7 +278,10 @@
       <button class="navlink" data-view="appointments"><span class="dot"></span>Appointments <span class="tag" id="nav-appts-count">0</span></button>
       <button class="navlink" data-view="billing"><span class="dot"></span>Billing <span class="tag" id="nav-bills-count">0</span></button>
     </nav>
-    <div class="rail-foot">SESSION DATA ONLY<br>no records persist on reload</div>
+    <div class="rail-foot">
+      <span>PERSISTENT STORAGE<br>records saved locally</span>
+      <button class="btn-clear-storage" onclick="clearMemory()">Reset memory</button>
+    </div>
   </aside>
 
   <main class="main">
@@ -282,11 +293,62 @@
 </div>
 
 <script>
-let patients = [];
-let appointments = [];
-let bills = [];
-let activity = [];
-let pidCounter = 1, aidCounter = 1, bidCounter = 1;
+// --- Memory (Local Storage) Layer ---
+const STORAGE_KEY = 'minidoc_hms_data_v1';
+
+function loadMemory() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {
+    console.error('Failed to load memory:', e);
+  }
+  return {
+    patients: [],
+    appointments: [],
+    bills: [],
+    activity: [],
+    pidCounter: 1,
+    aidCounter: 1,
+    bidCounter: 1
+  };
+}
+
+function saveMemory() {
+  try {
+    const data = { patients, appointments, bills, activity, pidCounter, aidCounter, bidCounter };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {
+    console.error('Failed to save memory:', e);
+  }
+}
+
+function clearMemory() {
+  if (confirm("Are you sure you want to clear all stored data? This cannot be undone.")) {
+    localStorage.removeItem(STORAGE_KEY);
+    const initial = loadMemory();
+    patients = initial.patients;
+    appointments = initial.appointments;
+    bills = initial.bills;
+    activity = initial.activity;
+    pidCounter = initial.pidCounter;
+    aidCounter = initial.aidCounter;
+    bidCounter = initial.bidCounter;
+    render();
+    toast('Memory reset successfully', 'error');
+  }
+}
+
+// Initialize Data from Memory
+const mem = loadMemory();
+let patients = mem.patients;
+let appointments = mem.appointments;
+let bills = mem.bills;
+let activity = mem.activity;
+let pidCounter = mem.pidCounter;
+let aidCounter = mem.aidCounter;
+let bidCounter = mem.bidCounter;
+
 let currentView = 'dashboard';
 let formOpen = { patients:false, appointments:false, billing:false };
 let search = { patients:'', appointments:'', billing:'' };
@@ -296,7 +358,11 @@ let pendingDelete = null;
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 function fmtMoney(n){ const num=parseFloat(n); return isNaN(num) ? n : '$'+num.toFixed(2); }
 function nowLabel(){ const d=new Date(); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
-function logActivity(type, text){ activity.unshift({type, text, time: nowLabel()}); activity = activity.slice(0,8); }
+function logActivity(type, text){ 
+  activity.unshift({type, text, time: nowLabel()}); 
+  activity = activity.slice(0,8); 
+  saveMemory();
+}
 
 function toast(msg, type){
   const stack = document.getElementById('toast-stack');
@@ -383,7 +449,7 @@ function renderDashboard(){
     ${quickActions}
     <div class="dash-grid">
       <div class="panel">
-        <div class="panel-head"><div><div class="panel-title">Recent activity</div><div class="panel-sub">Latest changes this session</div></div></div>
+        <div class="panel-head"><div><div class="panel-title">Recent activity</div><div class="panel-sub">Latest changes logged in memory</div></div></div>
         ${activityHtml}
       </div>
       <div class="panel">
@@ -516,6 +582,7 @@ function addPatient(){
   const id = pidCounter++;
   patients.push({ id, name, age, gender, phone, disease: disease||'—' });
   logActivity('patient', `${name} added as a new patient`);
+  saveMemory();
   formOpen.patients = false;
   render();
   toast(`${name} added to patient records`);
@@ -525,6 +592,7 @@ function removePatient(id){
   const p = patients.find(p=>p.id===id);
   patients = patients.filter(p=>p.id!==id);
   logActivity('patient', `${p?p.name:'Patient'} removed from records`);
+  saveMemory();
   render();
   toast(`${p?p.name:'Patient'} removed`, 'error');
 }
@@ -632,6 +700,7 @@ function bookAppt(){
   appointments.push({ id, pid, doctor, date, time, dept, status:'Scheduled' });
   const patient = patients.find(p=>p.id===pid);
   logActivity('appt', `${patient?patient.name:'Patient'} booked with ${doctor}`);
+  saveMemory();
   formOpen.appointments = false;
   render();
   toast('Appointment booked');
@@ -640,11 +709,13 @@ function bookAppt(){
 function updateApptStatus(id, status){
   const a = appointments.find(a=>a.id===id);
   if(a) a.status = status;
+  saveMemory();
   render();
   toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);
 }
 function removeAppt(id){
   appointments = appointments.filter(a=>a.id!==id);
+  saveMemory();
   render();
   toast('Appointment removed', 'error');
 }
@@ -694,7 +765,7 @@ function renderBilling(){
         ${patients.length ? `
         <div class="form-grid">
           <div class="field"><label for="f-b-pid">Patient</label><select id="f-b-pid">${patientOptions}</select></div>
-          <div class="field"><label for="f-b-amt">Amount (USD)</label><input id="f-b-amt" type="number" min="0" step="0.01" placeholder="150.00"><div class="field-msg" id="f-b-amt-msg"></div></div>
+          <div class="field"><label for="f-b-amt">Amount ($)</label><input id="f-b-amt" type="number" step="0.01" min="0" placeholder="150.00"><div class="field-msg" id="f-b-amt-msg"></div></div>
           <div class="field"><label for="f-b-status">Status</label>
             <select id="f-b-status"><option>Due</option><option>Paid</option></select>
           </div>
@@ -709,7 +780,7 @@ function renderBilling(){
         <div class="table-scroll">
         <table>
           <thead><tr>
-            <th class="sortable ${sortState.billing.key==='id'?'active':''}" onclick="toggleSort('billing','id')">Bill ID <span class="arrow">${sortArrow('billing','id')||'▲'}</span></th>
+            <th class="sortable ${sortState.billing.key==='id'?'active':''}" onclick="toggleSort('billing','id')">ID <span class="arrow">${sortArrow('billing','id')||'▲'}</span></th>
             <th>Patient</th>
             <th class="sortable ${sortState.billing.key==='amt'?'active':''}" onclick="toggleSort('billing','amt')">Amount <span class="arrow">${sortArrow('billing','amt')}</span></th>
             <th>Status</th><th></th>
@@ -720,7 +791,7 @@ function renderBilling(){
       ` : `<div class="no-results">No bills match "${search.billing}".</div>`) : `
         <div class="empty">
           <div class="empty-mark">No bills yet</div>
-          <div class="empty-title">Generate the first bill for a patient visit.</div>
+          <div class="empty-title">Generate a bill for a registered patient.</div>
           ${patients.length ? `<button class="btn" onclick="toggleForm('billing')">+ Generate bill</button>` : ''}
         </div>
       `}
@@ -729,16 +800,19 @@ function renderBilling(){
 }
 function addBill(){
   const pid = parseInt(document.getElementById('f-b-pid').value);
-  const amt = document.getElementById('f-b-amt').value;
+  const amt = document.getElementById('f-b-amt').value.trim();
   const status = document.getElementById('f-b-status').value;
 
   clearFieldErrors(['f-b-amt']);
-  if(!amt || parseFloat(amt) <= 0){ setFieldError('f-b-amt','Enter an amount greater than 0.'); return; }
+  let ok = true;
+  if(!amt || isNaN(amt) || parseFloat(amt)<=0){ setFieldError('f-b-amt','Enter a valid amount.'); ok=false; }
+  if(!ok) return;
 
   const id = bidCounter++;
-  bills.push({ id, pid, amt, status });
+  bills.push({ id, pid, amt: parseFloat(amt), status });
   const patient = patients.find(p=>p.id===pid);
-  logActivity('bill', `Bill of ${fmtMoney(amt)} generated for ${patient?patient.name:'patient'}`);
+  logActivity('bill', `Bill B-${String(id).padStart(3,'0')} generated for ${patient?patient.name:'Patient'}`);
+  saveMemory();
   formOpen.billing = false;
   render();
   toast('Bill generated');
@@ -747,48 +821,63 @@ function addBill(){
 function updateBillStatus(id, status){
   const b = bills.find(b=>b.id===id);
   if(b) b.status = status;
+  saveMemory();
   render();
   toast(`Bill B-${String(id).padStart(3,'0')} marked ${status}`);
 }
 function removeBill(id){
   bills = bills.filter(b=>b.id!==id);
+  saveMemory();
   render();
   toast('Bill removed', 'error');
 }
 
-function rowActionsHtml(kind, id){
-  if(pendingDelete && pendingDelete.kind===kind && pendingDelete.id===id){
-    return `<div class="confirm-row">
-      <span class="confirm-text">Remove?</span>
-      <button class="btn danger small" onclick="confirmDelete()">Yes</button>
-      <button class="btn ghost small" onclick="cancelDelete()">No</button>
-    </div>`;
+function rowActionsHtml(view, id){
+  if(pendingDelete && pendingDelete.view===view && pendingDelete.id===id){
+    return `
+      <div class="confirm-row">
+        <span class="confirm-text">Delete?</span>
+        <button class="btn danger small" onclick="confirmDelete('${view}', ${id})">Yes</button>
+        <button class="btn ghost small" onclick="cancelDelete()">No</button>
+      </div>
+    `;
   }
-  return `<div class="row-actions"><button class="btn ghost small" onclick="askDelete('${kind}', ${id})">Remove</button></div>`;
+  return `
+    <div class="row-actions">
+      <button class="btn ghost small" onclick="requestDelete('${view}', ${id})">Delete</button>
+    </div>
+  `;
 }
-function askDelete(kind, id){ pendingDelete = {kind, id}; render(); }
-function cancelDelete(){ pendingDelete = null; render(); }
-function confirmDelete(){
-  if(!pendingDelete) return;
-  const {kind, id} = pendingDelete;
+function requestDelete(view, id){
+  pendingDelete = { view, id };
+  render();
+}
+function cancelDelete(){
   pendingDelete = null;
-  if(kind==='patients') removePatient(id);
-  else if(kind==='appointments') removeAppt(id);
-  else if(kind==='billing') removeBill(id);
+  render();
+}
+function confirmDelete(view, id){
+  pendingDelete = null;
+  if(view==='patients') removePatient(id);
+  else if(view==='appointments') removeAppt(id);
+  else if(view==='billing') removeBill(id);
 }
 
-function render(){
+function updateNavCounts(){
   document.getElementById('nav-patients-count').textContent = patients.length;
   document.getElementById('nav-appts-count').textContent = appointments.length;
   document.getElementById('nav-bills-count').textContent = bills.length;
-  renderDashboard();
-  renderPatients();
-  renderAppointments();
-  renderBilling();
-  ['dashboard','patients','appointments','billing'].forEach(v=>{
-    document.getElementById('view-'+v).style.display = (v===currentView)?'block':'none';
-  });
 }
+
+function render(){
+  updateNavCounts();
+  if(currentView==='dashboard') renderDashboard();
+  else if(currentView==='patients') renderPatients();
+  else if(currentView==='appointments') renderAppointments();
+  else if(currentView==='billing') renderBilling();
+}
+
+// Initial render call
 render();
 </script>
 </body>

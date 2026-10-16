@@ -50,7 +50,13 @@ Patients, appointments, and bills are stored in the connected Supabase project. 
 ### Create the first administrator
 
 1. In Supabase Dashboard, open **Authentication → Users** and create the administrator account. Public sign-up is intentionally disabled.
-2. Set the user's **app metadata** to `{"role":"admin"}` using the Supabase Dashboard or a trusted server-side admin tool. Never store authorization roles in user-editable metadata.
+2. In Supabase Dashboard → **SQL Editor**, grant the admin role to that account by running this query with the account's email:
+   ```sql
+   update auth.users
+   set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+   where email = 'YOUR_ADMIN_EMAIL';
+   ```
+   Verify that one row was updated, then sign in again so Supabase issues a token with the new trusted app metadata. Never put authorization roles in user-editable metadata.
 3. Open `login.html` on the deployed site and sign in with that account.
 
 The browser uses the project's publishable key, which is safe to expose because every data table has RLS enabled. Never put a Supabase secret or service-role key in this repository. Anonymous table access remains denied.

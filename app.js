@@ -56,6 +56,7 @@ let aidCounter = mem.aidCounter;
 let bidCounter = mem.bidCounter;
 
 let currentView = 'dashboard';
+let pendingWorkflow = null;
 let formOpen = { patients:false, appointments:false, billing:false };
 let search = { patients:'', appointments:'', billing:'' };
 let sortState = { patients:{key:'id',dir:1}, appointments:{key:'id',dir:1}, billing:{key:'id',dir:1} };
@@ -110,7 +111,7 @@ document.addEventListener('click', event => {
   const id = Number(control.dataset.id);
   switch (control.dataset.action) {
     case 'clear-memory': clearMemory(); break;
-    case 'jump-open': jumpAndOpen(control.dataset.section); break;
+    case 'jump-open': openWorkflow(control.dataset.section); break;
     case 'toggle-form': toggleForm(control.dataset.section); break;
     case 'add-patient': addPatient(); break;
     case 'book-appointment': bookAppt(); break;
@@ -209,6 +210,18 @@ function renderDashboard(){
       </div>
     </div>
   `;
+}
+function openWorkflow(section){
+  if ((section === 'appointments' || section === 'billing') && !patients.length) {
+    pendingWorkflow = section;
+    currentView = 'patients';
+    formOpen.patients = true;
+    render();
+    toast(`Add a patient first to ${section === 'appointments' ? 'book an appointment' : 'generate a bill'}.`);
+    setTimeout(()=>{ const input=document.querySelector('.form-wrap.open input, .form-wrap.open select'); if(input) input.focus(); }, 50);
+    return;
+  }
+  jumpAndOpen(section);
 }
 function jumpAndOpen(section){
   switchView(section);
@@ -310,6 +323,10 @@ function renderPatients(){
   `;
 }
 function toggleForm(section){
+  if ((section === 'appointments' || section === 'billing') && !patients.length) {
+    openWorkflow(section);
+    return;
+  }
   formOpen[section] = !formOpen[section];
   render();
   if(formOpen[section]){
@@ -334,9 +351,15 @@ function addPatient(){
   patients.push({ id, name, age, gender, phone, disease: disease||'—' });
   logActivity('patient', `${name} added as a new patient`);
   saveMemory();
+  const nextWorkflow = pendingWorkflow;
+  pendingWorkflow = null;
   formOpen.patients = false;
+  if (nextWorkflow) {
+    currentView = nextWorkflow;
+    formOpen[nextWorkflow] = true;
+  }
   render();
-  toast(`${name} added to patient records`);
+  toast(nextWorkflow ? `${name} added. Continue with the ${nextWorkflow === 'appointments' ? 'appointment' : 'bill'}.` : `${name} added to patient records`);
   setTimeout(()=>{ const row=document.getElementById('prow-'+id); if(row) row.classList.add('flash'); }, 60);
 }
 function removePatient(id){
@@ -391,7 +414,7 @@ function renderAppointments(){
         </div>
         <div class="head-actions">
           ${appointments.length ? `<input class="search-input" maxlength="100" placeholder="Search appointments" value="${escapeHtml(search.appointments)}" data-search="appointments" aria-label="Search appointments">` : ''}
-          <button class="btn" data-action="toggle-form" data-section="appointments" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.appointments?'Close':'+ Book appointment'}</button>
+          <button class="btn" data-action="toggle-form" data-section="appointments">${formOpen.appointments?'Close':'+ Book appointment'}</button>
         </div>
       </div>
       <div class="form-wrap ${formOpen.appointments?'open':''}">
@@ -509,7 +532,7 @@ function renderBilling(){
         </div>
         <div class="head-actions">
           ${bills.length ? `<input class="search-input" maxlength="100" placeholder="Search bills" value="${escapeHtml(search.billing)}" data-search="billing" aria-label="Search bills">` : ''}
-          <button class="btn" data-action="toggle-form" data-section="billing" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.billing?'Close':'+ Generate bill'}</button>
+          <button class="btn" data-action="toggle-form" data-section="billing">${formOpen.billing?'Close':'+ Generate bill'}</button>
         </div>
       </div>
       <div class="form-wrap ${formOpen.billing?'open':''}">

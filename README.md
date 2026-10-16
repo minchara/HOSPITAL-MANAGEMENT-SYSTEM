@@ -45,16 +45,14 @@ The application utilizes an interactive numeric menu:
 
 ## Supabase
 
-The database schema is defined in `supabase/migrations/20261016043526_hospital_management_initial_schema.sql` and has been applied to the connected Supabase project. It creates `patients`, `appointments`, and `bills`.
+Patients, appointments, and bills are stored in the connected Supabase project. Admin sign-in is required. Database RLS permits only authenticated users whose trusted Supabase Auth `app_metadata.role` is `admin`. Appointments and bills can be created without linking a patient.
 
-The root `.mcp.json` configures the hosted Supabase MCP server for this project, limited to the database and documentation tools. Sign in to Supabase through your MCP client's OAuth flow; do not put access tokens or database keys in this repository.
+### Create the first administrator
 
-### Access and application status
+1. In Supabase Dashboard, open **Authentication → Users** and create the administrator account. Public sign-up is intentionally disabled.
+2. Set the user's **app metadata** to `{"role":"admin"}` using the Supabase Dashboard or a trusted server-side admin tool. Never store authorization roles in user-editable metadata.
+3. Open `login.html` on the deployed site and sign in with that account.
 
-Row Level Security is enabled on all three tables. The `anon` and `authenticated` roles have no table privileges or policies, so API access is denied until an authenticated staff access model and corresponding policies are designed. The Python console program currently stores records in memory and is not yet wired to Supabase. Never add a Supabase service-role or secret key to the repository or a client application.
+The browser uses the project's publishable key, which is safe to expose because every data table has RLS enabled. Never put a Supabase secret or service-role key in this repository. Anonymous table access remains denied.
 
-## Security
-
-This is a public demo. The website stores records in this browser's local storage and has no login or staff authorization. Do not enter real patient or payment data. The JavaScript escapes stored record values before rendering them and uses a Content Security Policy to restrict script sources.
-
-The Supabase tables are private by default with Row Level Security enabled and no access policies. Define authenticated staff roles and row-level policies before connecting the website to those tables. Never publish a service-role or secret key.
+This is a public demo. Do not enter real patient or payment data; it has no clinical compliance controls or staff-level permissions.

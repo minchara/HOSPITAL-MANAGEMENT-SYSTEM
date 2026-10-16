@@ -1,66 +1,36 @@
-
-// --- Memory (Local Storage) Layer ---
-const STORAGE_KEY = 'minidoc_hms_data_v1';
-
-function loadMemory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) {
-    console.error('Failed to load memory:', e);
-  }
-  return {
-    patients: [],
-    appointments: [],
-    bills: [],
-    activity: [],
-    pidCounter: 1,
-    aidCounter: 1,
-    bidCounter: 1
-  };
+// Supabase-backed application state. Database RLS restricts this data to admins.
+const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_PUBLISHABLE_KEY);
+let patients=[], appointments=[], bills=[], activity=[];
+let currentView='dashboard';
+let formOpen={patients:false,appointments:false,billing:false};
+let search={patients:'',appointments:'',billing:''};
+let sortState={patients:{key:'id',dir:1},appointments:{key:'id',dir:1},billing:{key:'id',dir:1}};
+let pendingDelete=null;
+function mapPatient(r){return{id:Number(r.id),name:r.name,age:r.age??'',gender:r.gender??'',phone:r.phone??'',disease:r.disease??''};}
+function mapAppointment(r){return{id:Number(r.id),pid:r.patient_id==null?null:Number(r.patient_id),doctor:r.doctor??'',date:r.appointment_date??'',time:(r.appointment_time??'').slice(0,5),dept:r.dept??'',status:r.status};}
+function mapBill(r){return{id:Number(r.id),pid:r.patient_id==null?null:Number(r.patient_id),amt:Number(r.amount),status:r.status};}
+async function loadData(){
+  const [p,a,b]=await Promise.all([
+    supabaseClient.from('patients').select('*').order('id'),
+    supabaseClient.from('appointments').select('*').order('id'),
+    supabaseClient.from('bills').select('*').order('id')
+  ]);
+  if(p.error)throw p.error;if(a.error)throw a.error;if(b.error)throw b.error;
+  patients=(p.data||[]).map(mapPatient);appointments=(a.data||[]).map(mapAppointment);bills=(b.data||[]).map(mapBill);render();
 }
-
-function saveMemory() {
-  try {
-    const data = { patients, appointments, bills, activity, pidCounter, aidCounter, bidCounter };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch(e) {
-    console.error('Failed to save memory:', e);
-  }
+async function startApplication(){
+  try{
+    const {data,error}=await supabaseClient.auth.getUser();
+    if(error||!data.user||data.user.app_metadata?.role!=='admin'){
+      if(data.user)await supabaseClient.auth.signOut();
+      window.location.replace('login.html');return;
+    }
+    const email=document.getElementById('admin-email');if(email)email.textContent=data.user.email||'Administrator';
+    await loadData();
+  }catch(error){console.error(error);toast('Could not connect to the database. Please try again.','error');}
 }
-
-function clearMemory() {
-  if (confirm("Are you sure you want to clear all stored data? This cannot be undone.")) {
-    localStorage.removeItem(STORAGE_KEY);
-    const initial = loadMemory();
-    patients = initial.patients;
-    appointments = initial.appointments;
-    bills = initial.bills;
-    activity = initial.activity;
-    pidCounter = initial.pidCounter;
-    aidCounter = initial.aidCounter;
-    bidCounter = initial.bidCounter;
-    render();
-    toast('Memory reset successfully', 'error');
-  }
-}
-
-// Initialize Data from Memory
-const mem = loadMemory();
-let patients = mem.patients;
-let appointments = mem.appointments;
-let bills = mem.bills;
-let activity = mem.activity;
-let pidCounter = mem.pidCounter;
-let aidCounter = mem.aidCounter;
-let bidCounter = mem.bidCounter;
-
-let currentView = 'dashboard';
-let pendingWorkflow = null;
-let formOpen = { patients:false, appointments:false, billing:false };
-let search = { patients:'', appointments:'', billing:'' };
-let sortState = { patients:{key:'id',dir:1}, appointments:{key:'id',dir:1}, billing:{key:'id',dir:1} };
-let pendingDelete = null;
+async function signOut(){const {error}=await supabaseClient.auth.signOut();if(error)throw error;window.location.replace('login.html');}
+function runAction(action){Promise.resolve().then(action).catch(error=>{console.error(error);toast(error.message||'Could not complete that action.','error');});}
 
 function escapeHtml(value) {
   const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -69,11 +39,7 @@ function escapeHtml(value) {
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 function fmtMoney(n){ const num=parseFloat(n); return isNaN(num) ? n : '$'+num.toFixed(2); }
 function nowLabel(){ const d=new Date(); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
-function logActivity(type, text){ 
-  activity.unshift({type, text, time: nowLabel()}); 
-  activity = activity.slice(0,8); 
-  saveMemory();
-}
+function logActivity(type, text){ activity.unshift({type,text,time:nowLabel()}); activity=activity.slice(0,8); }
 
 function toast(msg, type){
   const stack = document.getElementById('toast-stack');
@@ -110,14 +76,14 @@ document.addEventListener('click', event => {
 
   const id = Number(control.dataset.id);
   switch (control.dataset.action) {
-    case 'clear-memory': clearMemory(); break;
+    case 'sign-out': runAction(signOut); break;
     case 'jump-open': openWorkflow(control.dataset.section); break;
     case 'toggle-form': toggleForm(control.dataset.section); break;
-    case 'add-patient': addPatient(); break;
-    case 'book-appointment': bookAppt(); break;
-    case 'add-bill': addBill(); break;
+    case 'add-patient': runAction(addPatient); break;
+    case 'book-appointment': runAction(bookAppt); break;
+    case 'add-bill': runAction(addBill); break;
     case 'request-delete': requestDelete(control.dataset.view, id); break;
-    case 'confirm-delete': confirmDelete(control.dataset.view, id); break;
+    case 'confirm-delete': runAction(() => confirmDelete(control.dataset.view, id)); break;
     case 'cancel-delete': cancelDelete(); break;
   }
 });
@@ -136,8 +102,8 @@ document.addEventListener('change', event => {
   const control = event.target.closest('[data-action]');
   if (!control) return;
   const id = Number(control.dataset.id);
-  if (control.dataset.action === 'update-appt-status') updateApptStatus(id, control.value);
-  else if (control.dataset.action === 'update-bill-status') updateBillStatus(id, control.value);
+  if (control.dataset.action === 'update-appt-status') runAction(() => updateApptStatus(id, control.value));
+  else if (control.dataset.action === 'update-bill-status') runAction(() => updateBillStatus(id, control.value));
 });
 
 function setFieldError(id, msg){
@@ -173,8 +139,8 @@ function renderDashboard(){
   const quickActions = `
     <div class="quick-actions">
       <button class="qa-btn" data-action="jump-open" data-section="patients"><span class="plus">+</span> Add patient</button>
-      <button class="qa-btn" data-action="jump-open" data-section="appointments" ${patients.length?'':'disabled'}><span class="plus">+</span> Book appointment</button>
-      <button class="qa-btn" data-action="jump-open" data-section="billing" ${patients.length?'':'disabled'}><span class="plus">+</span> Generate bill</button>
+      <button class="qa-btn" data-action="jump-open" data-section="appointments"><span class="plus">+</span> Book appointment</button>
+      <button class="qa-btn" data-action="jump-open" data-section="billing"><span class="plus">+</span> Generate bill</button>
     </div>`;
 
   const activityHtml = activity.length ? activity.map(a=>`
@@ -211,18 +177,7 @@ function renderDashboard(){
     </div>
   `;
 }
-function openWorkflow(section){
-  if ((section === 'appointments' || section === 'billing') && !patients.length) {
-    pendingWorkflow = section;
-    currentView = 'patients';
-    formOpen.patients = true;
-    render();
-    toast(`Add a patient first to ${section === 'appointments' ? 'book an appointment' : 'generate a bill'}.`);
-    setTimeout(()=>{ const input=document.querySelector('.form-wrap.open input, .form-wrap.open select'); if(input) input.focus(); }, 50);
-    return;
-  }
-  jumpAndOpen(section);
-}
+function openWorkflow(section){ jumpAndOpen(section); }
 function jumpAndOpen(section){
   switchView(section);
   formOpen[section] = true;
@@ -323,54 +278,31 @@ function renderPatients(){
   `;
 }
 function toggleForm(section){
-  if ((section === 'appointments' || section === 'billing') && !patients.length) {
-    openWorkflow(section);
-    return;
-  }
   formOpen[section] = !formOpen[section];
   render();
   if(formOpen[section]){
     setTimeout(()=>{ const f=document.querySelector('.form-wrap.open input, .form-wrap.open select'); if(f) f.focus(); }, 50);
   }
 }
-function addPatient(){
-  const name = document.getElementById('f-p-name').value.trim();
-  const age = document.getElementById('f-p-age').value.trim();
-  const gender = document.getElementById('f-p-gender').value;
-  const phone = document.getElementById('f-p-phone').value.trim();
-  const disease = document.getElementById('f-p-disease').value.trim();
-
-  clearFieldErrors(['f-p-name','f-p-age','f-p-phone']);
-  let ok = true;
-  if(!name){ setFieldError('f-p-name','Name is required.'); ok=false; }
-  if(!age || !Number.isInteger(Number(age)) || Number(age)<1 || Number(age)>130){ setFieldError('f-p-age','Enter a valid age.'); ok=false; }
-  if(!phone){ setFieldError('f-p-phone','Phone is required.'); ok=false; }
-  if(!ok) return;
-
-  const id = pidCounter++;
-  patients.push({ id, name, age, gender, phone, disease: disease||'—' });
-  logActivity('patient', `${name} added as a new patient`);
-  saveMemory();
-  const nextWorkflow = pendingWorkflow;
-  pendingWorkflow = null;
-  formOpen.patients = false;
-  if (nextWorkflow) {
-    currentView = nextWorkflow;
-    formOpen[nextWorkflow] = true;
-  }
-  render();
-  toast(nextWorkflow ? `${name} added. Continue with the ${nextWorkflow === 'appointments' ? 'appointment' : 'bill'}.` : `${name} added to patient records`);
-  setTimeout(()=>{ const row=document.getElementById('prow-'+id); if(row) row.classList.add('flash'); }, 60);
+async function addPatient(){
+  const name=document.getElementById('f-p-name').value.trim(),age=document.getElementById('f-p-age').value.trim();
+  const gender=document.getElementById('f-p-gender').value,phone=document.getElementById('f-p-phone').value.trim();
+  const disease=document.getElementById('f-p-disease').value.trim();
+  clearFieldErrors(['f-p-name','f-p-age','f-p-phone']);let ok=true;
+  if(!name){setFieldError('f-p-name','Name is required.');ok=false;}
+  if(!age||!Number.isInteger(Number(age))||Number(age)<1||Number(age)>130){setFieldError('f-p-age','Enter a valid age.');ok=false;}
+  if(!phone){setFieldError('f-p-phone','Phone is required.');ok=false;}if(!ok)return;
+  const {data,error}=await supabaseClient.from('patients').insert({name,age:Number(age),gender,phone,disease:disease||'—'}).select().single();
+  if(error)throw error;const patient=mapPatient(data);patients.push(patient);logActivity('patient',`${name} added as a new patient`);
+  formOpen.patients=false;render();toast(`${name} added to patient records`);
+  setTimeout(()=>{const row=document.getElementById('prow-'+patient.id);if(row)row.classList.add('flash');},60);
 }
-function removePatient(id){
-  const p = patients.find(p=>p.id===id);
-  patients = patients.filter(p=>p.id!==id);
-  logActivity('patient', `${p?p.name:'Patient'} removed from records`);
-  saveMemory();
-  render();
-  toast(`${p?p.name:'Patient'} removed`, 'error');
+async function removePatient(id){
+  const patient=patients.find(p=>p.id===id),{error}=await supabaseClient.from('patients').delete().eq('id',id);
+  if(error)throw error;patients=patients.filter(p=>p.id!==id);
+  appointments=appointments.map(a=>a.pid===id?{...a,pid:null}:a);bills=bills.map(b=>b.pid===id?{...b,pid:null}:b);
+  logActivity('patient',`${patient?patient.name:'Patient'} removed from records`);render();toast(`${patient?patient.name:'Patient'} removed`,'error');
 }
-
 function renderAppointments(){
   const view = document.getElementById('view-appointments');
   let list = appointments.filter(a=>{
@@ -385,7 +317,7 @@ function renderAppointments(){
     return `
     <tr id="arow-${a.id}">
       <td><span class="id-chip">A-${String(a.id).padStart(3,'0')}</span></td>
-      <td>${escapeHtml(patient ? patient.name : '— removed —')}</td>
+      <td>${escapeHtml(patient ? patient.name : 'No patient linked')}</td>
       <td>${escapeHtml(a.doctor)}</td>
       <td class="mono">${escapeHtml(a.date)}</td>
       <td class="mono">${escapeHtml(a.time)}</td>
@@ -401,7 +333,7 @@ function renderAppointments(){
     </tr>
   `;}).join('');
 
-  const patientOptions = patients.map(p=>`<option value="${escapeHtml(p.id)}">P-${escapeHtml(String(p.id).padStart(3,'0'))} — ${escapeHtml(p.name)}</option>`).join('');
+  const patientOptions = '<option value="">No patient linked</option>' + patients.map(p=>`<option value="${escapeHtml(p.id)}">P-${escapeHtml(String(p.id).padStart(3,'0'))} — ${escapeHtml(p.name)}</option>`).join('');
 
   view.innerHTML = `
     <h1 class="page-title">Appointments</h1>
@@ -418,9 +350,8 @@ function renderAppointments(){
         </div>
       </div>
       <div class="form-wrap ${formOpen.appointments?'open':''}">
-        ${patients.length ? `
         <div class="form-grid">
-          <div class="field"><label for="f-a-pid">Patient</label><select id="f-a-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-a-pid">Patient (optional)</label><select id="f-a-pid">${patientOptions}</select></div>
           <div class="field"><label for="f-a-doctor">Doctor</label><input id="f-a-doctor" maxlength="120" autocomplete="off" placeholder="Dr. Rao"><div class="field-msg" id="f-a-doctor-msg"></div></div>
           <div class="field"><label for="f-a-date">Date</label><input id="f-a-date" type="date"><div class="field-msg" id="f-a-date-msg"></div></div>
           <div class="field"><label for="f-a-time">Time</label><input id="f-a-time" type="time"><div class="field-msg" id="f-a-time-msg"></div></div>
@@ -430,7 +361,6 @@ function renderAppointments(){
           <button class="btn" data-action="book-appointment">Save appointment</button>
           <button class="btn ghost" data-action="toggle-form" data-section="appointments">Cancel</button>
         </div>
-        ` : `<p class="form-hint">Add a patient first — appointments need a patient on file.</p>`}
       </div>
       ${appointments.length ? (list.length ? `
         <div class="table-scroll">
@@ -455,45 +385,29 @@ function renderAppointments(){
     </div>
   `;
 }
-function bookAppt(){
-  const pid = parseInt(document.getElementById('f-a-pid').value);
-  const doctor = document.getElementById('f-a-doctor').value.trim();
-  const date = document.getElementById('f-a-date').value;
-  const time = document.getElementById('f-a-time').value;
-  const dept = document.getElementById('f-a-dept').value.trim();
-
-  clearFieldErrors(['f-a-doctor','f-a-date','f-a-time','f-a-dept']);
-  let ok = true;
-  if(!doctor){ setFieldError('f-a-doctor','Doctor is required.'); ok=false; }
-  if(!date){ setFieldError('f-a-date','Pick a date.'); ok=false; }
-  if(!time){ setFieldError('f-a-time','Pick a time.'); ok=false; }
-  if(!dept){ setFieldError('f-a-dept','Department is required.'); ok=false; }
-  if(!ok) return;
-
-  const id = aidCounter++;
-  appointments.push({ id, pid, doctor, date, time, dept, status:'Scheduled' });
-  const patient = patients.find(p=>p.id===pid);
-  logActivity('appt', `${patient?patient.name:'Patient'} booked with ${doctor}`);
-  saveMemory();
-  formOpen.appointments = false;
-  render();
-  toast('Appointment booked');
-  setTimeout(()=>{ const row=document.getElementById('arow-'+id); if(row) row.classList.add('flash'); }, 60);
+async function bookAppt(){
+  const patientValue=document.getElementById('f-a-pid').value,pid=patientValue?Number(patientValue):null;
+  const doctor=document.getElementById('f-a-doctor').value.trim(),date=document.getElementById('f-a-date').value;
+  const time=document.getElementById('f-a-time').value,dept=document.getElementById('f-a-dept').value.trim();
+  clearFieldErrors(['f-a-doctor','f-a-date','f-a-time','f-a-dept']);let ok=true;
+  if(!doctor){setFieldError('f-a-doctor','Doctor is required.');ok=false;}
+  if(!date){setFieldError('f-a-date','Pick a date.');ok=false;}
+  if(!time){setFieldError('f-a-time','Pick a time.');ok=false;}
+  if(!dept){setFieldError('f-a-dept','Department is required.');ok=false;}if(!ok)return;
+  const {data,error}=await supabaseClient.from('appointments').insert({patient_id:pid,doctor,appointment_date:date,appointment_time:time,dept,status:'Scheduled'}).select().single();
+  if(error)throw error;const appointment=mapAppointment(data);appointments.push(appointment);
+  const patient=patients.find(p=>p.id===pid);logActivity('appt',`${patient?patient.name:'Unlinked appointment'} booked with ${doctor}`);
+  formOpen.appointments=false;render();toast('Appointment booked');
+  setTimeout(()=>{const row=document.getElementById('arow-'+appointment.id);if(row)row.classList.add('flash');},60);
 }
-function updateApptStatus(id, status){
-  const a = appointments.find(a=>a.id===id);
-  if(a) a.status = status;
-  saveMemory();
-  render();
-  toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);
+async function updateApptStatus(id,status){
+  const {error}=await supabaseClient.from('appointments').update({status}).eq('id',id);if(error)throw error;
+  const a=appointments.find(a=>a.id===id);if(a)a.status=status;render();toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);
 }
-function removeAppt(id){
-  appointments = appointments.filter(a=>a.id!==id);
-  saveMemory();
-  render();
-  toast('Appointment removed', 'error');
+async function removeAppt(id){
+  const {error}=await supabaseClient.from('appointments').delete().eq('id',id);if(error)throw error;
+  appointments=appointments.filter(a=>a.id!==id);render();toast('Appointment removed','error');
 }
-
 function renderBilling(){
   const view = document.getElementById('view-billing');
   let list = bills.filter(b=>{
@@ -507,7 +421,7 @@ function renderBilling(){
     return `
     <tr id="brow-${b.id}">
       <td><span class="id-chip">B-${String(b.id).padStart(3,'0')}</span></td>
-      <td>${escapeHtml(patient ? patient.name : '— removed —')}</td>
+      <td>${escapeHtml(patient ? patient.name : 'No patient linked')}</td>
       <td class="mono">${escapeHtml(fmtMoney(b.amt))}</td>
       <td>
         <select class="status-select" data-action="update-bill-status" data-id="${b.id}" aria-label="Bill status">
@@ -536,19 +450,15 @@ function renderBilling(){
         </div>
       </div>
       <div class="form-wrap ${formOpen.billing?'open':''}">
-        ${patients.length ? `
         <div class="form-grid">
-          <div class="field"><label for="f-b-pid">Patient</label><select id="f-b-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-b-pid">Patient (optional)</label><select id="f-b-pid">${patientOptions}</select></div>
           <div class="field"><label for="f-b-amt">Amount ($)</label><input id="f-b-amt" type="number" step="0.01" min="0" placeholder="150.00"><div class="field-msg" id="f-b-amt-msg"></div></div>
-          <div class="field"><label for="f-b-status">Status</label>
-            <select id="f-b-status"><option>Due</option><option>Paid</option></select>
-          </div>
+          <div class="field"><label for="f-b-status">Status</label><select id="f-b-status"><option>Due</option><option>Paid</option></select></div>
         </div>
         <div class="form-actions">
           <button class="btn" data-action="add-bill">Save bill</button>
           <button class="btn ghost" data-action="toggle-form" data-section="billing">Cancel</button>
         </div>
-        ` : `<p class="form-hint">Add a patient first — bills need a patient on file.</p>`}
       </div>
       ${bills.length ? (list.length ? `
         <div class="table-scroll">
@@ -572,40 +482,24 @@ function renderBilling(){
     </div>
   `;
 }
-function addBill(){
-  const pid = parseInt(document.getElementById('f-b-pid').value);
-  const amt = document.getElementById('f-b-amt').value.trim();
-  const status = document.getElementById('f-b-status').value;
-
-  clearFieldErrors(['f-b-amt']);
-  let ok = true;
-  if(!amt || isNaN(amt) || parseFloat(amt)<=0){ setFieldError('f-b-amt','Enter a valid amount.'); ok=false; }
-  if(!ok) return;
-
-  const id = bidCounter++;
-  bills.push({ id, pid, amt: parseFloat(amt), status });
-  const patient = patients.find(p=>p.id===pid);
-  logActivity('bill', `Bill B-${String(id).padStart(3,'0')} generated for ${patient?patient.name:'Patient'}`);
-  saveMemory();
-  formOpen.billing = false;
-  render();
-  toast('Bill generated');
-  setTimeout(()=>{ const row=document.getElementById('brow-'+id); if(row) row.classList.add('flash'); }, 60);
+async function addBill(){
+  const patientValue=document.getElementById('f-b-pid').value,pid=patientValue?Number(patientValue):null;
+  const amt=document.getElementById('f-b-amt').value.trim(),status=document.getElementById('f-b-status').value;
+  clearFieldErrors(['f-b-amt']);if(!amt||!Number.isFinite(Number(amt))||Number(amt)<=0){setFieldError('f-b-amt','Enter a valid amount.');return;}
+  const {data,error}=await supabaseClient.from('bills').insert({patient_id:pid,amount:Number(amt),status}).select().single();
+  if(error)throw error;const bill=mapBill(data);bills.push(bill);const patient=patients.find(p=>p.id===pid);
+  logActivity('bill',`Bill B-${String(bill.id).padStart(3,'0')} generated for ${patient?patient.name:'an unlinked visit'}`);
+  formOpen.billing=false;render();toast('Bill generated');
+  setTimeout(()=>{const row=document.getElementById('brow-'+bill.id);if(row)row.classList.add('flash');},60);
 }
-function updateBillStatus(id, status){
-  const b = bills.find(b=>b.id===id);
-  if(b) b.status = status;
-  saveMemory();
-  render();
-  toast(`Bill B-${String(id).padStart(3,'0')} marked ${status}`);
+async function updateBillStatus(id,status){
+  const {error}=await supabaseClient.from('bills').update({status}).eq('id',id);if(error)throw error;
+  const b=bills.find(b=>b.id===id);if(b)b.status=status;render();toast(`Bill B-${String(id).padStart(3,'0')} marked ${status}`);
 }
-function removeBill(id){
-  bills = bills.filter(b=>b.id!==id);
-  saveMemory();
-  render();
-  toast('Bill removed', 'error');
+async function removeBill(id){
+  const {error}=await supabaseClient.from('bills').delete().eq('id',id);if(error)throw error;
+  bills=bills.filter(b=>b.id!==id);render();toast('Bill removed','error');
 }
-
 function rowActionsHtml(view, id){
   if(pendingDelete && pendingDelete.view===view && pendingDelete.id===id){
     return `
@@ -630,11 +524,11 @@ function cancelDelete(){
   pendingDelete = null;
   render();
 }
-function confirmDelete(view, id){
+async function confirmDelete(view, id){
   pendingDelete = null;
-  if(view==='patients') removePatient(id);
-  else if(view==='appointments') removeAppt(id);
-  else if(view==='billing') removeBill(id);
+  if(view==='patients') await removePatient(id);
+  else if(view==='appointments') await removeAppt(id);
+  else if(view==='billing') await removeBill(id);
 }
 
 function updateNavCounts(){
@@ -651,5 +545,5 @@ function render(){
   else if(currentView==='billing') renderBilling();
 }
 
-// Initial render call
-render();
+// Authenticate, then load the admin's records from Supabase.
+startApplication();

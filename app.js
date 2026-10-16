@@ -1,0 +1,632 @@
+
+// --- Memory (Local Storage) Layer ---
+const STORAGE_KEY = 'minidoc_hms_data_v1';
+
+function loadMemory() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {
+    console.error('Failed to load memory:', e);
+  }
+  return {
+    patients: [],
+    appointments: [],
+    bills: [],
+    activity: [],
+    pidCounter: 1,
+    aidCounter: 1,
+    bidCounter: 1
+  };
+}
+
+function saveMemory() {
+  try {
+    const data = { patients, appointments, bills, activity, pidCounter, aidCounter, bidCounter };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {
+    console.error('Failed to save memory:', e);
+  }
+}
+
+function clearMemory() {
+  if (confirm("Are you sure you want to clear all stored data? This cannot be undone.")) {
+    localStorage.removeItem(STORAGE_KEY);
+    const initial = loadMemory();
+    patients = initial.patients;
+    appointments = initial.appointments;
+    bills = initial.bills;
+    activity = initial.activity;
+    pidCounter = initial.pidCounter;
+    aidCounter = initial.aidCounter;
+    bidCounter = initial.bidCounter;
+    render();
+    toast('Memory reset successfully', 'error');
+  }
+}
+
+// Initialize Data from Memory
+const mem = loadMemory();
+let patients = mem.patients;
+let appointments = mem.appointments;
+let bills = mem.bills;
+let activity = mem.activity;
+let pidCounter = mem.pidCounter;
+let aidCounter = mem.aidCounter;
+let bidCounter = mem.bidCounter;
+
+let currentView = 'dashboard';
+let formOpen = { patients:false, appointments:false, billing:false };
+let search = { patients:'', appointments:'', billing:'' };
+let sortState = { patients:{key:'id',dir:1}, appointments:{key:'id',dir:1}, billing:{key:'id',dir:1} };
+let pendingDelete = null;
+
+function escapeHtml(value) {
+  const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(value ?? '').replace(/[&<>"']/g, char => entities[char]);
+}
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+function fmtMoney(n){ const num=parseFloat(n); return isNaN(num) ? n : '$'+num.toFixed(2); }
+function nowLabel(){ const d=new Date(); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function logActivity(type, text){ 
+  activity.unshift({type, text, time: nowLabel()}); 
+  activity = activity.slice(0,8); 
+  saveMemory();
+}
+
+function toast(msg, type){
+  const stack = document.getElementById('toast-stack');
+  const node = el(`<div class="toast ${type==='error'?'error':''}" role="status">
+    <svg class="ic" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l3.5 3.5L16 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>${escapeHtml(msg)}</span>
+  </div>`);
+  stack.appendChild(node);
+  setTimeout(()=>{ node.classList.add('leaving'); setTimeout(()=>node.remove(), 200); }, 2600);
+}
+
+function switchView(view){
+  currentView = view;
+  pendingDelete = null;
+  document.querySelectorAll('.navlink').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  ['dashboard','patients','appointments','billing'].forEach(v=>{
+    document.getElementById('view-'+v).style.display = (v===view)?'block':'none';
+  });
+  render();
+}
+document.getElementById('nav').addEventListener('click', e=>{
+  const t = e.target.closest('.navlink');
+  if(t) switchView(t.dataset.view);
+});
+
+document.addEventListener('click', event => {
+  const control = event.target.closest('[data-action], [data-sort-view]');
+  if (!control) return;
+
+  if (control.dataset.sortView) {
+    toggleSort(control.dataset.sortView, control.dataset.sortKey);
+    return;
+  }
+
+  const id = Number(control.dataset.id);
+  switch (control.dataset.action) {
+    case 'clear-memory': clearMemory(); break;
+    case 'jump-open': jumpAndOpen(control.dataset.section); break;
+    case 'toggle-form': toggleForm(control.dataset.section); break;
+    case 'add-patient': addPatient(); break;
+    case 'book-appointment': bookAppt(); break;
+    case 'add-bill': addBill(); break;
+    case 'request-delete': requestDelete(control.dataset.view, id); break;
+    case 'confirm-delete': confirmDelete(control.dataset.view, id); break;
+    case 'cancel-delete': cancelDelete(); break;
+  }
+});
+
+document.addEventListener('input', event => {
+  const control = event.target.closest('[data-search]');
+  if (!control) return;
+  const section = control.dataset.search;
+  search[section] = control.value;
+  if (section === 'patients') renderPatients();
+  else if (section === 'appointments') renderAppointments();
+  else if (section === 'billing') renderBilling();
+});
+
+document.addEventListener('change', event => {
+  const control = event.target.closest('[data-action]');
+  if (!control) return;
+  const id = Number(control.dataset.id);
+  if (control.dataset.action === 'update-appt-status') updateApptStatus(id, control.value);
+  else if (control.dataset.action === 'update-bill-status') updateBillStatus(id, control.value);
+});
+
+function setFieldError(id, msg){
+  const input = document.getElementById(id);
+  const msgEl = document.getElementById(id+'-msg');
+  if(input) input.classList.toggle('err', !!msg);
+  if(msgEl) msgEl.textContent = msg || '';
+}
+function clearFieldErrors(ids){ ids.forEach(id=>setFieldError(id, '')); }
+
+function renderDashboard(){
+  const view = document.getElementById('view-dashboard');
+  const totalRevenue = bills.filter(b=>b.status==='Paid').reduce((s,b)=>s+parseFloat(b.amt||0),0);
+  const dueCount = bills.filter(b=>b.status==='Due').length;
+  const scheduledCount = appointments.filter(a=>a.status==='Scheduled').length;
+
+  const vitalsHtml = `
+    <div class="vitals">
+      ${[
+        ['Patients on record', patients.length],
+        ['Appointments scheduled', scheduledCount],
+        ['Bills outstanding', dueCount],
+        ['Revenue collected', '$'+totalRevenue.toFixed(2)]
+      ].map(([label,value])=>`
+        <div class="vital">
+          <span class="vital-pulse"></span>
+          <div class="vital-label">${label}</div>
+          <div class="vital-value">${value}</div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  const quickActions = `
+    <div class="quick-actions">
+      <button class="qa-btn" data-action="jump-open" data-section="patients"><span class="plus">+</span> Add patient</button>
+      <button class="qa-btn" data-action="jump-open" data-section="appointments" ${patients.length?'':'disabled'}><span class="plus">+</span> Book appointment</button>
+      <button class="qa-btn" data-action="jump-open" data-section="billing" ${patients.length?'':'disabled'}><span class="plus">+</span> Generate bill</button>
+    </div>`;
+
+  const activityHtml = activity.length ? activity.map(a=>`
+    <div class="activity-item">
+      <span class="activity-dot ${escapeHtml(a.type)}"></span>
+      <span>${escapeHtml(a.text)}</span>
+      <span class="activity-time">${escapeHtml(a.time)}</span>
+    </div>
+  `).join('') : `<div class="empty"><div class="empty-mark">Nothing yet</div><div class="empty-title">Activity will appear here as you add records.</div></div>`;
+
+  const dueBills = bills.filter(b=>b.status==='Due').slice(0,5).map(b=>{
+    const p = patients.find(p=>p.id===b.pid);
+    return `<div class="activity-item">
+      <span class="activity-dot bill"></span>
+      <span>${escapeHtml(p?p.name:'—')} · <span class="mono">${escapeHtml(fmtMoney(b.amt))}</span></span>
+      <span class="activity-time"><span class="status Due">Due</span></span>
+    </div>`;
+  }).join('') || `<div class="empty"><div class="empty-mark">All clear</div><div class="empty-title">No outstanding bills right now.</div></div>`;
+
+  view.innerHTML = `
+    <h1 class="page-title">Overview</h1>
+    <p class="page-sub">A snapshot of today's chart activity.</p>
+    ${vitalsHtml}
+    ${quickActions}
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><div><div class="panel-title">Recent activity</div><div class="panel-sub">Latest changes logged in memory</div></div></div>
+        ${activityHtml}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><div class="panel-title">Outstanding bills</div><div class="panel-sub">Needs follow-up</div></div></div>
+        ${dueBills}
+      </div>
+    </div>
+  `;
+}
+function jumpAndOpen(section){
+  switchView(section);
+  formOpen[section] = true;
+  render();
+  setTimeout(()=>{
+    const firstInput = document.querySelector('.form-wrap.open input, .form-wrap.open select');
+    if(firstInput) firstInput.focus();
+  }, 50);
+}
+
+function applySort(list, view){
+  const {key, dir} = sortState[view];
+  return [...list].sort((a,b)=>{
+    let av=a[key], bv=b[key];
+    if(typeof av==='string') av=av.toLowerCase();
+    if(typeof bv==='string') bv=bv.toLowerCase();
+    if(av<bv) return -1*dir;
+    if(av>bv) return 1*dir;
+    return 0;
+  });
+}
+function toggleSort(view, key){
+  if(sortState[view].key===key){ sortState[view].dir *= -1; }
+  else{ sortState[view] = {key, dir:1}; }
+  render();
+}
+function sortArrow(view, key){
+  const s = sortState[view];
+  if(s.key!==key) return '';
+  return s.dir===1 ? '▲' : '▼';
+}
+
+function renderPatients(){
+  const view = document.getElementById('view-patients');
+  let list = patients.filter(p => (p.name+p.phone+p.disease).toLowerCase().includes(search.patients.toLowerCase()));
+  list = applySort(list, 'patients');
+
+  const rows = list.map(p=>`
+    <tr id="prow-${p.id}">
+      <td><span class="id-chip">P-${String(p.id).padStart(3,'0')}</span></td>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(p.age)}</td>
+      <td>${escapeHtml(p.gender)}</td>
+      <td class="mono">${escapeHtml(p.phone)}</td>
+      <td>${escapeHtml(p.disease)}</td>
+      <td>${rowActionsHtml('patients', p.id)}</td>
+    </tr>
+  `).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Patients</h1>
+    <p class="page-sub">Registered patients and their intake details.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Patient records</div>
+          <div class="panel-sub">${patients.length} on file</div>
+        </div>
+        <div class="head-actions">
+          ${patients.length ? `<input class="search-input" maxlength="100" placeholder="Search patients" value="${escapeHtml(search.patients)}" data-search="patients" aria-label="Search patients">` : ''}
+          <button class="btn" data-action="toggle-form" data-section="patients">${formOpen.patients?'Close':'+ Add patient'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.patients?'open':''}">
+        <div class="form-grid">
+          <div class="field"><label for="f-p-name">Name</label><input id="f-p-name" maxlength="120" autocomplete="off" placeholder="Jane Doe"><div class="field-msg" id="f-p-name-msg"></div></div>
+          <div class="field"><label for="f-p-age">Age</label><input id="f-p-age" type="number" min="1" max="130" step="1" placeholder="34"><div class="field-msg" id="f-p-age-msg"></div></div>
+          <div class="field"><label for="f-p-gender">Gender</label>
+            <select id="f-p-gender"><option>Female</option><option>Male</option><option>Other</option></select>
+          </div>
+          <div class="field"><label for="f-p-phone">Phone</label><input id="f-p-phone" type="tel" maxlength="32" autocomplete="off" placeholder="+91 98765 43210"><div class="field-msg" id="f-p-phone-msg"></div></div>
+          <div class="field"><label for="f-p-disease">Disease / reason</label><input id="f-p-disease" maxlength="250" autocomplete="off" placeholder="Hypertension"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" data-action="add-patient">Save patient</button>
+          <button class="btn ghost" data-action="toggle-form" data-section="patients">Cancel</button>
+        </div>
+      </div>
+      ${patients.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.patients.key==='id'?'active':''}" data-sort-view="patients" data-sort-key="id">ID <span class="arrow">${sortArrow('patients','id')||'▲'}</span></th>
+            <th class="sortable ${sortState.patients.key==='name'?'active':''}" data-sort-view="patients" data-sort-key="name">Name <span class="arrow">${sortArrow('patients','name')}</span></th>
+            <th>Age</th><th>Gender</th><th>Phone</th><th>Disease</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No patients match "${escapeHtml(search.patients)}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No patients yet</div>
+          <div class="empty-title">Add the first patient to start a chart.</div>
+          <button class="btn" data-action="toggle-form" data-section="patients">+ Add patient</button>
+        </div>
+      `}
+    </div>
+  `;
+}
+function toggleForm(section){
+  formOpen[section] = !formOpen[section];
+  render();
+  if(formOpen[section]){
+    setTimeout(()=>{ const f=document.querySelector('.form-wrap.open input, .form-wrap.open select'); if(f) f.focus(); }, 50);
+  }
+}
+function addPatient(){
+  const name = document.getElementById('f-p-name').value.trim();
+  const age = document.getElementById('f-p-age').value.trim();
+  const gender = document.getElementById('f-p-gender').value;
+  const phone = document.getElementById('f-p-phone').value.trim();
+  const disease = document.getElementById('f-p-disease').value.trim();
+
+  clearFieldErrors(['f-p-name','f-p-age','f-p-phone']);
+  let ok = true;
+  if(!name){ setFieldError('f-p-name','Name is required.'); ok=false; }
+  if(!age || !Number.isInteger(Number(age)) || Number(age)<1 || Number(age)>130){ setFieldError('f-p-age','Enter a valid age.'); ok=false; }
+  if(!phone){ setFieldError('f-p-phone','Phone is required.'); ok=false; }
+  if(!ok) return;
+
+  const id = pidCounter++;
+  patients.push({ id, name, age, gender, phone, disease: disease||'—' });
+  logActivity('patient', `${name} added as a new patient`);
+  saveMemory();
+  formOpen.patients = false;
+  render();
+  toast(`${name} added to patient records`);
+  setTimeout(()=>{ const row=document.getElementById('prow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function removePatient(id){
+  const p = patients.find(p=>p.id===id);
+  patients = patients.filter(p=>p.id!==id);
+  logActivity('patient', `${p?p.name:'Patient'} removed from records`);
+  saveMemory();
+  render();
+  toast(`${p?p.name:'Patient'} removed`, 'error');
+}
+
+function renderAppointments(){
+  const view = document.getElementById('view-appointments');
+  let list = appointments.filter(a=>{
+    const p = patients.find(p=>p.id===a.pid);
+    const hay = (a.doctor+a.dept+(p?p.name:'')).toLowerCase();
+    return hay.includes(search.appointments.toLowerCase());
+  });
+  list = applySort(list, 'appointments');
+
+  const rows = list.map(a=>{
+    const patient = patients.find(p=>p.id===a.pid);
+    return `
+    <tr id="arow-${a.id}">
+      <td><span class="id-chip">A-${String(a.id).padStart(3,'0')}</span></td>
+      <td>${escapeHtml(patient ? patient.name : '— removed —')}</td>
+      <td>${escapeHtml(a.doctor)}</td>
+      <td class="mono">${escapeHtml(a.date)}</td>
+      <td class="mono">${escapeHtml(a.time)}</td>
+      <td>${escapeHtml(a.dept)}</td>
+      <td>
+        <select class="status-select" data-action="update-appt-status" data-id="${a.id}" aria-label="Appointment status">
+          <option ${a.status==='Scheduled'?'selected':''}>Scheduled</option>
+          <option ${a.status==='Completed'?'selected':''}>Completed</option>
+          <option ${a.status==='Cancelled'?'selected':''}>Cancelled</option>
+        </select>
+      </td>
+      <td>${rowActionsHtml('appointments', a.id)}</td>
+    </tr>
+  `;}).join('');
+
+  const patientOptions = patients.map(p=>`<option value="${escapeHtml(p.id)}">P-${escapeHtml(String(p.id).padStart(3,'0'))} — ${escapeHtml(p.name)}</option>`).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Appointments</h1>
+    <p class="page-sub">Bookings across doctors and departments.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Appointment schedule</div>
+          <div class="panel-sub">${appointments.length} booked</div>
+        </div>
+        <div class="head-actions">
+          ${appointments.length ? `<input class="search-input" maxlength="100" placeholder="Search appointments" value="${escapeHtml(search.appointments)}" data-search="appointments" aria-label="Search appointments">` : ''}
+          <button class="btn" data-action="toggle-form" data-section="appointments" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.appointments?'Close':'+ Book appointment'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.appointments?'open':''}">
+        ${patients.length ? `
+        <div class="form-grid">
+          <div class="field"><label for="f-a-pid">Patient</label><select id="f-a-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-a-doctor">Doctor</label><input id="f-a-doctor" maxlength="120" autocomplete="off" placeholder="Dr. Rao"><div class="field-msg" id="f-a-doctor-msg"></div></div>
+          <div class="field"><label for="f-a-date">Date</label><input id="f-a-date" type="date"><div class="field-msg" id="f-a-date-msg"></div></div>
+          <div class="field"><label for="f-a-time">Time</label><input id="f-a-time" type="time"><div class="field-msg" id="f-a-time-msg"></div></div>
+          <div class="field"><label for="f-a-dept">Department</label><input id="f-a-dept" maxlength="100" autocomplete="off" placeholder="Cardiology"><div class="field-msg" id="f-a-dept-msg"></div></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" data-action="book-appointment">Save appointment</button>
+          <button class="btn ghost" data-action="toggle-form" data-section="appointments">Cancel</button>
+        </div>
+        ` : `<p class="form-hint">Add a patient first — appointments need a patient on file.</p>`}
+      </div>
+      ${appointments.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.appointments.key==='id'?'active':''}" data-sort-view="appointments" data-sort-key="id">ID <span class="arrow">${sortArrow('appointments','id')||'▲'}</span></th>
+            <th>Patient</th>
+            <th class="sortable ${sortState.appointments.key==='doctor'?'active':''}" data-sort-view="appointments" data-sort-key="doctor">Doctor <span class="arrow">${sortArrow('appointments','doctor')}</span></th>
+            <th class="sortable ${sortState.appointments.key==='date'?'active':''}" data-sort-view="appointments" data-sort-key="date">Date <span class="arrow">${sortArrow('appointments','date')}</span></th>
+            <th>Time</th><th>Dept</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No appointments match "${escapeHtml(search.appointments)}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No appointments yet</div>
+          <div class="empty-title">Book the first appointment for a registered patient.</div>
+          ${patients.length ? `<button class="btn" data-action="toggle-form" data-section="appointments">+ Book appointment</button>` : ''}
+        </div>
+      `}
+    </div>
+  `;
+}
+function bookAppt(){
+  const pid = parseInt(document.getElementById('f-a-pid').value);
+  const doctor = document.getElementById('f-a-doctor').value.trim();
+  const date = document.getElementById('f-a-date').value;
+  const time = document.getElementById('f-a-time').value;
+  const dept = document.getElementById('f-a-dept').value.trim();
+
+  clearFieldErrors(['f-a-doctor','f-a-date','f-a-time','f-a-dept']);
+  let ok = true;
+  if(!doctor){ setFieldError('f-a-doctor','Doctor is required.'); ok=false; }
+  if(!date){ setFieldError('f-a-date','Pick a date.'); ok=false; }
+  if(!time){ setFieldError('f-a-time','Pick a time.'); ok=false; }
+  if(!dept){ setFieldError('f-a-dept','Department is required.'); ok=false; }
+  if(!ok) return;
+
+  const id = aidCounter++;
+  appointments.push({ id, pid, doctor, date, time, dept, status:'Scheduled' });
+  const patient = patients.find(p=>p.id===pid);
+  logActivity('appt', `${patient?patient.name:'Patient'} booked with ${doctor}`);
+  saveMemory();
+  formOpen.appointments = false;
+  render();
+  toast('Appointment booked');
+  setTimeout(()=>{ const row=document.getElementById('arow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function updateApptStatus(id, status){
+  const a = appointments.find(a=>a.id===id);
+  if(a) a.status = status;
+  saveMemory();
+  render();
+  toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);
+}
+function removeAppt(id){
+  appointments = appointments.filter(a=>a.id!==id);
+  saveMemory();
+  render();
+  toast('Appointment removed', 'error');
+}
+
+function renderBilling(){
+  const view = document.getElementById('view-billing');
+  let list = bills.filter(b=>{
+    const p = patients.find(p=>p.id===b.pid);
+    return ((p?p.name:'')+b.status).toLowerCase().includes(search.billing.toLowerCase());
+  });
+  list = applySort(list, 'billing');
+
+  const rows = list.map(b=>{
+    const patient = patients.find(p=>p.id===b.pid);
+    return `
+    <tr id="brow-${b.id}">
+      <td><span class="id-chip">B-${String(b.id).padStart(3,'0')}</span></td>
+      <td>${escapeHtml(patient ? patient.name : '— removed —')}</td>
+      <td class="mono">${escapeHtml(fmtMoney(b.amt))}</td>
+      <td>
+        <select class="status-select" data-action="update-bill-status" data-id="${b.id}" aria-label="Bill status">
+          <option ${b.status==='Paid'?'selected':''}>Paid</option>
+          <option ${b.status==='Due'?'selected':''}>Due</option>
+        </select>
+      </td>
+      <td>${rowActionsHtml('billing', b.id)}</td>
+    </tr>
+  `;}).join('');
+
+  const patientOptions = patients.map(p=>`<option value="${escapeHtml(p.id)}">P-${escapeHtml(String(p.id).padStart(3,'0'))} — ${escapeHtml(p.name)}</option>`).join('');
+
+  view.innerHTML = `
+    <h1 class="page-title">Billing</h1>
+    <p class="page-sub">Charges generated per patient visit.</p>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Bills</div>
+          <div class="panel-sub">${bills.length} generated</div>
+        </div>
+        <div class="head-actions">
+          ${bills.length ? `<input class="search-input" maxlength="100" placeholder="Search bills" value="${escapeHtml(search.billing)}" data-search="billing" aria-label="Search bills">` : ''}
+          <button class="btn" data-action="toggle-form" data-section="billing" ${patients.length?'':'disabled'} title="${patients.length?'':'Add a patient first'}">${formOpen.billing?'Close':'+ Generate bill'}</button>
+        </div>
+      </div>
+      <div class="form-wrap ${formOpen.billing?'open':''}">
+        ${patients.length ? `
+        <div class="form-grid">
+          <div class="field"><label for="f-b-pid">Patient</label><select id="f-b-pid">${patientOptions}</select></div>
+          <div class="field"><label for="f-b-amt">Amount ($)</label><input id="f-b-amt" type="number" step="0.01" min="0" placeholder="150.00"><div class="field-msg" id="f-b-amt-msg"></div></div>
+          <div class="field"><label for="f-b-status">Status</label>
+            <select id="f-b-status"><option>Due</option><option>Paid</option></select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" data-action="add-bill">Save bill</button>
+          <button class="btn ghost" data-action="toggle-form" data-section="billing">Cancel</button>
+        </div>
+        ` : `<p class="form-hint">Add a patient first — bills need a patient on file.</p>`}
+      </div>
+      ${bills.length ? (list.length ? `
+        <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th class="sortable ${sortState.billing.key==='id'?'active':''}" data-sort-view="billing" data-sort-key="id">ID <span class="arrow">${sortArrow('billing','id')||'▲'}</span></th>
+            <th>Patient</th>
+            <th class="sortable ${sortState.billing.key==='amt'?'active':''}" data-sort-view="billing" data-sort-key="amt">Amount <span class="arrow">${sortArrow('billing','amt')}</span></th>
+            <th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        </div>
+      ` : `<div class="no-results">No bills match "${escapeHtml(search.billing)}".</div>`) : `
+        <div class="empty">
+          <div class="empty-mark">No bills yet</div>
+          <div class="empty-title">Generate a bill for a registered patient.</div>
+          ${patients.length ? `<button class="btn" data-action="toggle-form" data-section="billing">+ Generate bill</button>` : ''}
+        </div>
+      `}
+    </div>
+  `;
+}
+function addBill(){
+  const pid = parseInt(document.getElementById('f-b-pid').value);
+  const amt = document.getElementById('f-b-amt').value.trim();
+  const status = document.getElementById('f-b-status').value;
+
+  clearFieldErrors(['f-b-amt']);
+  let ok = true;
+  if(!amt || isNaN(amt) || parseFloat(amt)<=0){ setFieldError('f-b-amt','Enter a valid amount.'); ok=false; }
+  if(!ok) return;
+
+  const id = bidCounter++;
+  bills.push({ id, pid, amt: parseFloat(amt), status });
+  const patient = patients.find(p=>p.id===pid);
+  logActivity('bill', `Bill B-${String(id).padStart(3,'0')} generated for ${patient?patient.name:'Patient'}`);
+  saveMemory();
+  formOpen.billing = false;
+  render();
+  toast('Bill generated');
+  setTimeout(()=>{ const row=document.getElementById('brow-'+id); if(row) row.classList.add('flash'); }, 60);
+}
+function updateBillStatus(id, status){
+  const b = bills.find(b=>b.id===id);
+  if(b) b.status = status;
+  saveMemory();
+  render();
+  toast(`Bill B-${String(id).padStart(3,'0')} marked ${status}`);
+}
+function removeBill(id){
+  bills = bills.filter(b=>b.id!==id);
+  saveMemory();
+  render();
+  toast('Bill removed', 'error');
+}
+
+function rowActionsHtml(view, id){
+  if(pendingDelete && pendingDelete.view===view && pendingDelete.id===id){
+    return `
+      <div class="confirm-row">
+        <span class="confirm-text">Delete?</span>
+        <button class="btn danger small" data-action="confirm-delete" data-view="${view}" data-id="${id}">Yes</button>
+        <button class="btn ghost small" data-action="cancel-delete">No</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="row-actions">
+      <button class="btn ghost small" data-action="request-delete" data-view="${view}" data-id="${id}">Delete</button>
+    </div>
+  `;
+}
+function requestDelete(view, id){
+  pendingDelete = { view, id };
+  render();
+}
+function cancelDelete(){
+  pendingDelete = null;
+  render();
+}
+function confirmDelete(view, id){
+  pendingDelete = null;
+  if(view==='patients') removePatient(id);
+  else if(view==='appointments') removeAppt(id);
+  else if(view==='billing') removeBill(id);
+}
+
+function updateNavCounts(){
+  document.getElementById('nav-patients-count').textContent = patients.length;
+  document.getElementById('nav-appts-count').textContent = appointments.length;
+  document.getElementById('nav-bills-count').textContent = bills.length;
+}
+
+function render(){
+  updateNavCounts();
+  if(currentView==='dashboard') renderDashboard();
+  else if(currentView==='patients') renderPatients();
+  else if(currentView==='appointments') renderAppointments();
+  else if(currentView==='billing') renderBilling();
+}
+
+// Initial render call
+render();

@@ -52,3 +52,9 @@ The root `.mcp.json` configures the hosted Supabase MCP server for this project,
 ### Access and application status
 
 Row Level Security is enabled on all three tables. The `anon` and `authenticated` roles have no table privileges or policies, so API access is denied until an authenticated staff access model and corresponding policies are designed. The Python console program currently stores records in memory and is not yet wired to Supabase. Never add a Supabase service-role or secret key to the repository or a client application.
+
+## Security
+
+This is a public demo. The website stores records in this browser's local storage and has no login or staff authorization. Do not enter real patient or payment data. The JavaScript escapes stored record values before rendering them and uses a Content Security Policy to restrict script sources.
+
+The Supabase tables are private by default with Row Level Security enabled and no access policies. Define authenticated staff roles and row-level policies before connecting the website to those tables. Never publish a service-role or secret key.

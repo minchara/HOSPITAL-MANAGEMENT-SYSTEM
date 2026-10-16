@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self' https://rffrndqipwqolsjbptde.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net">
+<title>Book an appointment — MiniDoc</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f4f7f6;color:#122224;font-family:system-ui,sans-serif;padding:36px 16px}.card{max-width:700px;margin:0 auto;padding:30px;background:#fff;border:1px solid #dce6e4;border-radius:14px;box-shadow:0 12px 32px #0a2c2c18}h1{margin:0 0 8px;font-size:25px}.sub{margin:0 0 24px;color:#5c7274}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.field label{display:block;margin-bottom:6px;font-size:13px;font-weight:600}.field input{width:100%;padding:11px 12px;border:1px solid #dce6e4;border-radius:8px;font:inherit}.field input:focus{outline:2px solid #0f5c5c;outline-offset:1px}.actions{display:flex;gap:12px;align-items:center;margin-top:20px}button{padding:12px 18px;border:0;border-radius:8px;background:#0f5c5c;color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.message{min-height:20px;margin:16px 0 0;color:#c93b3b;font-size:14px}.message.success{color:#1f8a5f}.back{color:#0f5c5c;text-decoration:none;font-size:14px}.notice{margin-top:22px;padding:12px;background:#eaf1f0;border-radius:8px;color:#415b5c;font-size:12px;line-height:1.5}.trap{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Book an appointment</h1>
+  <p class="sub">No account is needed. The clinic will contact you to confirm your request.</p>
+  <form id="booking-form">
+    <div class="grid">
+      <div class="field"><label for="guest-name">Your name</label><input id="guest-name" required maxlength="120" autocomplete="name"></div>
+      <div class="field"><label for="guest-phone">Phone number</label><input id="guest-phone" type="tel" required maxlength="32" autocomplete="tel" placeholder="+91 98765 43210"></div>
+      <div class="field"><label for="doctor">Doctor</label><input id="doctor" required maxlength="120" autocomplete="off" placeholder="Dr. Rao"></div>
+      <div class="field"><label for="department">Department</label><input id="department" required maxlength="100" autocomplete="off" placeholder="Cardiology"></div>
+      <div class="field"><label for="date">Date</label><input id="date" type="date" required></div>
+      <div class="field"><label for="time">Time</label><input id="time" type="time" required></div>
+    </div>
+    <div class="trap" aria-hidden="true"><label for="website">Leave this field empty</label><input id="website" tabindex="-1" autocomplete="off"></div>
+    <div class="actions"><button id="submit-button" type="submit">Send appointment request</button><a class="back" href="login.html">Admin sign in</a></div>
+    <p id="booking-message" class="message" role="status" aria-live="polite"></p>
+  </form>
+  <div class="notice">Demo only. Do not submit real patient or payment information.</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js" defer></script>
+<script src="supabase-config.js" defer></script>
+<script src="public-booking.js" defer></script>
+</body>
+</html>

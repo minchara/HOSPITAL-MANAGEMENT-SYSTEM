@@ -7,7 +7,7 @@ let search={patients:'',appointments:'',billing:''};
 let sortState={patients:{key:'id',dir:1},appointments:{key:'id',dir:1},billing:{key:'id',dir:1}};
 let pendingDelete=null;
 function mapPatient(r){return{id:Number(r.id),name:r.name,age:r.age??'',gender:r.gender??'',phone:r.phone??'',disease:r.disease??''};}
-function mapAppointment(r){return{id:Number(r.id),pid:r.patient_id==null?null:Number(r.patient_id),doctor:r.doctor??'',date:r.appointment_date??'',time:(r.appointment_time??'').slice(0,5),dept:r.dept??'',status:r.status};}
+function mapAppointment(r){return{id:Number(r.id),pid:r.patient_id==null?null:Number(r.patient_id),guestName:r.guest_name??'',guestPhone:r.guest_phone??'',doctor:r.doctor??'',date:r.appointment_date??'',time:(r.appointment_time??'').slice(0,5),dept:r.dept??'',status:r.status};}
 function mapBill(r){return{id:Number(r.id),pid:r.patient_id==null?null:Number(r.patient_id),amt:Number(r.amount),status:r.status};}
 async function loadData(){
   const [p,a,b]=await Promise.all([
@@ -80,7 +80,6 @@ document.addEventListener('click', event => {
     case 'jump-open': openWorkflow(control.dataset.section); break;
     case 'toggle-form': toggleForm(control.dataset.section); break;
     case 'add-patient': runAction(addPatient); break;
-    case 'book-appointment': runAction(bookAppt); break;
     case 'add-bill': runAction(addBill); break;
     case 'request-delete': requestDelete(control.dataset.view, id); break;
     case 'confirm-delete': runAction(() => confirmDelete(control.dataset.view, id)); break;
@@ -139,7 +138,6 @@ function renderDashboard(){
   const quickActions = `
     <div class="quick-actions">
       <button class="qa-btn" data-action="jump-open" data-section="patients"><span class="plus">+</span> Add patient</button>
-      <button class="qa-btn" data-action="jump-open" data-section="appointments"><span class="plus">+</span> Book appointment</button>
       <button class="qa-btn" data-action="jump-open" data-section="billing"><span class="plus">+</span> Generate bill</button>
     </div>`;
 
@@ -304,102 +302,56 @@ async function removePatient(id){
   logActivity('patient',`${patient?patient.name:'Patient'} removed from records`);render();toast(`${patient?patient.name:'Patient'} removed`,'error');
 }
 function renderAppointments(){
-  const view = document.getElementById('view-appointments');
-  let list = appointments.filter(a=>{
-    const p = patients.find(p=>p.id===a.pid);
-    const hay = (a.doctor+a.dept+(p?p.name:'')).toLowerCase();
+  const view=document.getElementById('view-appointments');
+  let list=appointments.filter(a=>{
+    const patient=patients.find(p=>p.id===a.pid);
+    const hay=(a.guestName+a.guestPhone+a.doctor+a.dept+(patient?patient.name:'')).toLowerCase();
     return hay.includes(search.appointments.toLowerCase());
   });
-  list = applySort(list, 'appointments');
-
-  const rows = list.map(a=>{
-    const patient = patients.find(p=>p.id===a.pid);
+  list=applySort(list,'appointments');
+  const rows=list.map(a=>{
+    const patient=patients.find(p=>p.id===a.pid);
+    const displayName=patient?patient.name:(a.guestName||'No patient linked');
     return `
-    <tr id="arow-${a.id}">
-      <td><span class="id-chip">A-${String(a.id).padStart(3,'0')}</span></td>
-      <td>${escapeHtml(patient ? patient.name : 'No patient linked')}</td>
-      <td>${escapeHtml(a.doctor)}</td>
-      <td class="mono">${escapeHtml(a.date)}</td>
-      <td class="mono">${escapeHtml(a.time)}</td>
-      <td>${escapeHtml(a.dept)}</td>
-      <td>
-        <select class="status-select" data-action="update-appt-status" data-id="${a.id}" aria-label="Appointment status">
-          <option ${a.status==='Scheduled'?'selected':''}>Scheduled</option>
-          <option ${a.status==='Completed'?'selected':''}>Completed</option>
-          <option ${a.status==='Cancelled'?'selected':''}>Cancelled</option>
-        </select>
-      </td>
-      <td>${rowActionsHtml('appointments', a.id)}</td>
-    </tr>
-  `;}).join('');
-
-  const patientOptions = '<option value="">No patient linked</option>' + patients.map(p=>`<option value="${escapeHtml(p.id)}">P-${escapeHtml(String(p.id).padStart(3,'0'))} — ${escapeHtml(p.name)}</option>`).join('');
-
-  view.innerHTML = `
+      <tr id="arow-${a.id}">
+        <td><span class="id-chip">A-${String(a.id).padStart(3,'0')}</span></td>
+        <td><div>${escapeHtml(displayName)}</div>${a.guestPhone?`<div class="panel-sub">${escapeHtml(a.guestPhone)}</div>`:''}</td>
+        <td>${escapeHtml(a.doctor)}</td>
+        <td class="mono">${escapeHtml(a.date)}</td>
+        <td class="mono">${escapeHtml(a.time)}</td>
+        <td>${escapeHtml(a.dept)}</td>
+        <td>
+          <select class="status-select" data-action="update-appt-status" data-id="${a.id}" aria-label="Appointment status">
+            <option ${a.status==='Scheduled'?'selected':''}>Scheduled</option>
+            <option ${a.status==='Completed'?'selected':''}>Completed</option>
+            <option ${a.status==='Cancelled'?'selected':''}>Cancelled</option>
+          </select>
+        </td>
+        <td>${rowActionsHtml('appointments',a.id)}</td>
+      </tr>`;
+  }).join('');
+  view.innerHTML=`
     <h1 class="page-title">Appointments</h1>
-    <p class="page-sub">Bookings across doctors and departments.</p>
+    <p class="page-sub">Public appointment requests and scheduled visits.</p>
     <div class="panel">
       <div class="panel-head">
-        <div>
-          <div class="panel-title">Appointment schedule</div>
-          <div class="panel-sub">${appointments.length} booked</div>
-        </div>
+        <div><div class="panel-title">Appointments</div><div class="panel-sub">${appointments.length} booked</div></div>
         <div class="head-actions">
-          ${appointments.length ? `<input class="search-input" maxlength="100" placeholder="Search appointments" value="${escapeHtml(search.appointments)}" data-search="appointments" aria-label="Search appointments">` : ''}
-          <button class="btn" data-action="toggle-form" data-section="appointments">${formOpen.appointments?'Close':'+ Book appointment'}</button>
+          ${appointments.length?`<input class="search-input" maxlength="100" placeholder="Search appointments" value="${escapeHtml(search.appointments)}" data-search="appointments" aria-label="Search appointments">`:''}
         </div>
       </div>
-      <div class="form-wrap ${formOpen.appointments?'open':''}">
-        <div class="form-grid">
-          <div class="field"><label for="f-a-pid">Patient (optional)</label><select id="f-a-pid">${patientOptions}</select></div>
-          <div class="field"><label for="f-a-doctor">Doctor</label><input id="f-a-doctor" maxlength="120" autocomplete="off" placeholder="Dr. Rao"><div class="field-msg" id="f-a-doctor-msg"></div></div>
-          <div class="field"><label for="f-a-date">Date</label><input id="f-a-date" type="date"><div class="field-msg" id="f-a-date-msg"></div></div>
-          <div class="field"><label for="f-a-time">Time</label><input id="f-a-time" type="time"><div class="field-msg" id="f-a-time-msg"></div></div>
-          <div class="field"><label for="f-a-dept">Department</label><input id="f-a-dept" maxlength="100" autocomplete="off" placeholder="Cardiology"><div class="field-msg" id="f-a-dept-msg"></div></div>
-        </div>
-        <div class="form-actions">
-          <button class="btn" data-action="book-appointment">Save appointment</button>
-          <button class="btn ghost" data-action="toggle-form" data-section="appointments">Cancel</button>
-        </div>
-      </div>
-      ${appointments.length ? (list.length ? `
-        <div class="table-scroll">
-        <table>
+      ${appointments.length?(list.length?`
+        <div class="table-scroll"><table>
           <thead><tr>
-            <th class="sortable ${sortState.appointments.key==='id'?'active':''}" data-sort-view="appointments" data-sort-key="id">ID <span class="arrow">${sortArrow('appointments','id')||'▲'}</span></th>
-            <th>Patient</th>
-            <th class="sortable ${sortState.appointments.key==='doctor'?'active':''}" data-sort-view="appointments" data-sort-key="doctor">Doctor <span class="arrow">${sortArrow('appointments','doctor')}</span></th>
-            <th class="sortable ${sortState.appointments.key==='date'?'active':''}" data-sort-view="appointments" data-sort-key="date">Date <span class="arrow">${sortArrow('appointments','date')}</span></th>
-            <th>Time</th><th>Dept</th><th>Status</th><th></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        </div>
-      ` : `<div class="no-results">No appointments match "${escapeHtml(search.appointments)}".</div>`) : `
-        <div class="empty">
-          <div class="empty-mark">No appointments yet</div>
-          <div class="empty-title">Book the first appointment for a registered patient.</div>
-          ${patients.length ? `<button class="btn" data-action="toggle-form" data-section="appointments">+ Book appointment</button>` : ''}
-        </div>
+            <th>ID</th><th>Patient / Guest</th><th>Doctor</th><th>Date</th><th>Time</th><th>Dept</th><th>Status</th><th></th>
+          </tr></thead><tbody>${rows}</tbody>
+        </table></div>
+      `:`<div class="no-results">No appointments match "${escapeHtml(search.appointments)}".</div>`):`
+        <div class="empty"><div class="empty-mark">No appointments yet</div><div class="empty-title">Public booking requests will appear here.</div></div>
       `}
-    </div>
-  `;
+    </div>`;
 }
-async function bookAppt(){
-  const patientValue=document.getElementById('f-a-pid').value,pid=patientValue?Number(patientValue):null;
-  const doctor=document.getElementById('f-a-doctor').value.trim(),date=document.getElementById('f-a-date').value;
-  const time=document.getElementById('f-a-time').value,dept=document.getElementById('f-a-dept').value.trim();
-  clearFieldErrors(['f-a-doctor','f-a-date','f-a-time','f-a-dept']);let ok=true;
-  if(!doctor){setFieldError('f-a-doctor','Doctor is required.');ok=false;}
-  if(!date){setFieldError('f-a-date','Pick a date.');ok=false;}
-  if(!time){setFieldError('f-a-time','Pick a time.');ok=false;}
-  if(!dept){setFieldError('f-a-dept','Department is required.');ok=false;}if(!ok)return;
-  const {data,error}=await supabaseClient.from('appointments').insert({patient_id:pid,doctor,appointment_date:date,appointment_time:time,dept,status:'Scheduled'}).select().single();
-  if(error)throw error;const appointment=mapAppointment(data);appointments.push(appointment);
-  const patient=patients.find(p=>p.id===pid);logActivity('appt',`${patient?patient.name:'Unlinked appointment'} booked with ${doctor}`);
-  formOpen.appointments=false;render();toast('Appointment booked');
-  setTimeout(()=>{const row=document.getElementById('arow-'+appointment.id);if(row)row.classList.add('flash');},60);
-}
+
 async function updateApptStatus(id,status){
   const {error}=await supabaseClient.from('appointments').update({status}).eq('id',id);if(error)throw error;
   const a=appointments.find(a=>a.id===id);if(a)a.status=status;render();toast(`Appointment A-${String(id).padStart(3,'0')} marked ${status}`);

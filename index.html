@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self' https://rffrndqipwqolsjbptde.supabase.co wss://rffrndqipwqolsjbptde.supabase.co; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' https://cdn.jsdelivr.net">
 <title>MiniDoc — Hospital Management</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -281,8 +281,8 @@
       <button class="navlink" data-view="billing"><span class="dot"></span>Billing <span class="tag" id="nav-bills-count">0</span></button>
     </nav>
     <div class="rail-foot">
-      <span>DEMO ONLY<br>Do not enter real patient data<br>stored in this browser</span>
-      <button class="btn-clear-storage" data-action="clear-memory">Reset memory</button>
+      <span>ADMIN CONSOLE<br><span id="admin-email">Checking session…</span><br>Demo only — no real patient data</span>
+      <button class="btn-clear-storage" data-action="sign-out">Sign out</button>
     </div>
   </aside>
 
@@ -294,6 +294,8 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js" defer></script>
+<script src="supabase-config.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>

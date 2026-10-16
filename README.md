@@ -45,7 +45,7 @@ The application utilizes an interactive numeric menu:
 
 ## Supabase
 
-Patients, appointments, and bills are stored in the connected Supabase project. Admin sign-in is required. Database RLS permits only authenticated users whose trusted Supabase Auth `app_metadata.role` is `admin`. Appointments and bills can be created without linking a patient.
+Patients, appointments, and bills are stored in the connected Supabase project. Admin sign-in is required for patient records, billing, and viewing/managing appointment requests. Anyone can use `book-appointment.html` to submit an appointment request without signing in; the public API can only insert validated appointment requests and cannot read them. Admins can see guest name and phone in the appointments view.
 
 ### Create the first administrator
 

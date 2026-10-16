@@ -43,3 +43,12 @@ The application utilizes an interactive numeric menu:
   
 * **7 (Exit)**: Safely close out the current operational system loop.
 
+## Supabase
+
+The database schema is defined in `supabase/migrations/20261016043526_hospital_management_initial_schema.sql` and has been applied to the connected Supabase project. It creates `patients`, `appointments`, and `bills`.
+
+The root `.mcp.json` configures the hosted Supabase MCP server for this project, limited to the database and documentation tools. Sign in to Supabase through your MCP client's OAuth flow; do not put access tokens or database keys in this repository.
+
+### Access and application status
+
+Row Level Security is enabled on all three tables. The `anon` and `authenticated` roles have no table privileges or policies, so API access is denied until an authenticated staff access model and corresponding policies are designed. The Python console program currently stores records in memory and is not yet wired to Supabase. Never add a Supabase service-role or secret key to the repository or a client application.
